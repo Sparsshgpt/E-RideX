@@ -1,42 +1,27 @@
-def dispatch_vehicles(predicted_demand, vehicles):
+from database.database import (
+    get_available_vehicles,
+    update_vehicle_status
+)
+
+
+def dispatch_vehicles(predicted_demand):
     """
-    Intelligent vehicle dispatch engine.
+    Dispatch the nearest available e-rickshaws.
 
-    Selection criteria:
-    1. Vehicle must be available.
-    2. Battery must be at least 30%.
-    3. Vehicle must have passenger capacity.
-    4. Nearest vehicles get priority.
-    5. Higher battery is preferred when distance is similar.
+    Vehicles are fetched from the SQLite database.
     """
 
-    MIN_BATTERY = 30
-    MIN_CAPACITY = 1
+    # Get available vehicles sorted by distance
+    available = get_available_vehicles()
 
-    # Step 1: Filter suitable vehicles
-    suitable_vehicles = [
-        vehicle
-        for vehicle in vehicles
-        if vehicle["status"] == "available"
-        and vehicle["battery"] >= MIN_BATTERY
-        and vehicle["capacity"] >= MIN_CAPACITY
-    ]
+    # Select vehicles according to predicted demand
+    selected = available[:predicted_demand]
 
-    # Step 2: Rank vehicles
-    # Distance is the primary factor.
-    # Battery is secondary.
-    suitable_vehicles.sort(
-        key=lambda vehicle: (
-            vehicle["distance"],
-            -vehicle["battery"]
-        )
-    )
-
-    # Step 3: Select required vehicles
-    selected = suitable_vehicles[:predicted_demand]
-
-    # Step 4: Mark selected vehicles as busy
+    # Update dispatched vehicles to busy
     for vehicle in selected:
+        update_vehicle_status(vehicle["id"], "busy")
+
+        # Reflect updated status in response
         vehicle["status"] = "busy"
 
     return selected

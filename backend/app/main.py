@@ -2,17 +2,26 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from ai.demand_predictor import predict_demand
+
 from database.vehicle_data import (
     get_all_vehicles,
     get_available_vehicles,
     get_vehicle
 )
+
 from dispatch.dispatch_engine import dispatch_vehicles
 
 
+# ============================================================
+# FASTAPI APPLICATION
+# ============================================================
+
 app = FastAPI(
-    title="AI Campus E-Rickshaw System",
-    description="AI-based campus e-rickshaw demand prediction and intelligent dispatch system",
+    title="E-RideX - AI Campus E-Rickshaw System",
+    description=(
+        "AI-based campus e-rickshaw demand prediction "
+        "and intelligent vehicle dispatch system"
+    ),
     version="1.0.0"
 )
 
@@ -40,7 +49,9 @@ class DispatchRequest(BaseModel):
 @app.get("/")
 def home():
     return {
-        "message": "AI Campus E-Rickshaw System is running!"
+        "system": "E-RideX",
+        "message": "AI Campus E-Rickshaw System is running!",
+        "version": "1.0.0"
     }
 
 
@@ -52,7 +63,7 @@ def home():
 def health():
     return {
         "status": "healthy",
-        "system": "AI Campus E-Rickshaw"
+        "system": "E-RideX"
     }
 
 
@@ -143,25 +154,40 @@ def intelligent_dispatch(request: DispatchRequest):
     )
 
     # --------------------------------------------------------
-    # STEP 2: Get currently available vehicles
+    # STEP 2: Check available vehicles BEFORE dispatch
     # --------------------------------------------------------
 
-    available = get_available_vehicles()
+    available_before = get_available_vehicles()
+
+    available_count = len(available_before)
 
     # --------------------------------------------------------
-    # STEP 3: Dispatch best vehicles
+    # STEP 3: Dispatch vehicles
+    #
+    # dispatch_engine now gets vehicles directly
+    # from the SQLite database.
     # --------------------------------------------------------
 
-    dispatched = dispatch_vehicles(
-        predicted_demand,
-        available
-    )
+    dispatched = dispatch_vehicles(predicted_demand)
 
     # --------------------------------------------------------
-    # STEP 4: Return dispatch decision
+    # STEP 4: Determine dispatch status
+    # --------------------------------------------------------
+
+    dispatched_count = len(dispatched)
+
+    if dispatched_count >= predicted_demand:
+        dispatch_status = "fully_dispatched"
+    else:
+        dispatch_status = "partial_dispatch"
+
+    # --------------------------------------------------------
+    # STEP 5: Return complete decision
     # --------------------------------------------------------
 
     return {
+        "system": "E-RideX",
+
         "input": {
             "hour": request.hour,
             "day": request.day,
@@ -170,15 +196,16 @@ def intelligent_dispatch(request: DispatchRequest):
 
         "predicted_demand": predicted_demand,
 
-        "available_vehicles_before_dispatch": len(available),
+        "available_vehicles_before_dispatch": available_count,
 
-        "vehicles_dispatched": len(dispatched),
+        "vehicles_dispatched": dispatched_count,
 
-        "dispatch_status": (
-            "fully_dispatched"
-            if len(dispatched) >= predicted_demand
-            else "partial_dispatch"
+        "vehicles_remaining": max(
+            available_count - dispatched_count,
+            0
         ),
+
+        "dispatch_status": dispatch_status,
 
         "dispatched_vehicles": dispatched
     }
