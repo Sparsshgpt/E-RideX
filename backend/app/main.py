@@ -1,31 +1,25 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from ai.demand_predictor import predict_demand
-from dispatch.dispatch_engine import dispatch_vehicles
-
 from database.vehicle_data import (
     get_all_vehicles,
     get_available_vehicles,
-    get_vehicle,
-    mark_vehicle_busy
+    get_vehicle
 )
+from dispatch.dispatch_engine import dispatch_vehicles
 
-
-# --------------------------------------------------
-# FastAPI Application
-# --------------------------------------------------
 
 app = FastAPI(
-    title="E-RideX - AI Campus E-Rickshaw System",
+    title="AI Campus E-Rickshaw System",
     description="AI-based campus e-rickshaw demand prediction and intelligent dispatch system",
     version="1.0.0"
 )
 
 
-# --------------------------------------------------
-# Request Models
-# --------------------------------------------------
+# ============================================================
+# REQUEST MODELS
+# ============================================================
 
 class DemandRequest(BaseModel):
     hour: int
@@ -34,117 +28,157 @@ class DemandRequest(BaseModel):
 
 
 class DispatchRequest(BaseModel):
-    predicted_demand: int
+    hour: int
+    day: int
+    weather: int = 0
 
 
-# --------------------------------------------------
-# Home
-# --------------------------------------------------
+# ============================================================
+# HOME
+# ============================================================
 
 @app.get("/")
 def home():
-
     return {
-        "message": "E-RideX AI Campus E-Rickshaw System is running!"
+        "message": "AI Campus E-Rickshaw System is running!"
     }
 
 
-# --------------------------------------------------
-# Health Check
-# --------------------------------------------------
+# ============================================================
+# HEALTH CHECK
+# ============================================================
 
 @app.get("/health")
 def health():
-
     return {
-        "status": "healthy"
+        "status": "healthy",
+        "system": "AI Campus E-Rickshaw"
     }
 
 
-# --------------------------------------------------
-# AI Demand Prediction
-# --------------------------------------------------
+# ============================================================
+# AI DEMAND PREDICTION
+# ============================================================
 
 @app.post("/predict-demand")
 def predict_vehicle_demand(request: DemandRequest):
 
     demand = predict_demand(
-        request.hour,
-        request.day,
-        request.weather
+        hour=request.hour,
+        day=request.day,
+        weather=request.weather
     )
 
     return {
+        "hour": request.hour,
+        "day": request.day,
+        "weather": request.weather,
         "predicted_demand": demand
     }
 
 
-# --------------------------------------------------
-# Get all vehicles
-# --------------------------------------------------
+# ============================================================
+# GET ALL VEHICLES
+# ============================================================
 
 @app.get("/vehicles")
 def get_vehicles():
 
+    vehicles = get_all_vehicles()
+
     return {
-        "vehicles": get_all_vehicles()
+        "count": len(vehicles),
+        "vehicles": vehicles
     }
 
 
-# --------------------------------------------------
-# Get available vehicles
-# --------------------------------------------------
+# ============================================================
+# GET AVAILABLE VEHICLES
+# ============================================================
 
 @app.get("/vehicles/available")
-def get_available():
+def available_vehicles():
+
+    vehicles = get_available_vehicles()
 
     return {
-        "vehicles": get_available_vehicles()
+        "count": len(vehicles),
+        "vehicles": vehicles
     }
 
 
-# --------------------------------------------------
-# Get vehicle by ID
-# --------------------------------------------------
+# ============================================================
+# GET VEHICLE BY ID
+# ============================================================
 
 @app.get("/vehicles/{vehicle_id}")
-def get_vehicle_details(vehicle_id: str):
+def vehicle_details(vehicle_id: str):
 
     vehicle = get_vehicle(vehicle_id)
 
     if vehicle is None:
-
-        return {
-            "error": "Vehicle not found"
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="Vehicle not found"
+        )
 
     return vehicle
 
 
-# --------------------------------------------------
-# Intelligent Vehicle Dispatch
-# --------------------------------------------------
+# ============================================================
+# INTELLIGENT DISPATCH
+# ============================================================
 
 @app.post("/dispatch")
-def dispatch(request: DispatchRequest):
+def intelligent_dispatch(request: DispatchRequest):
 
-    # Get currently available vehicles
-    available_vehicles = get_available_vehicles()
+    # --------------------------------------------------------
+    # STEP 1: Predict demand using AI
+    # --------------------------------------------------------
 
-    # Select nearest vehicles
-    selected = dispatch_vehicles(
-        request.predicted_demand,
-        available_vehicles
+    predicted_demand = predict_demand(
+        hour=request.hour,
+        day=request.day,
+        weather=request.weather
     )
 
-    # Mark selected vehicles as busy
-    for vehicle in selected:
+    # --------------------------------------------------------
+    # STEP 2: Get currently available vehicles
+    # --------------------------------------------------------
 
-        mark_vehicle_busy(vehicle["id"])
+    available = get_available_vehicles()
+
+    # --------------------------------------------------------
+    # STEP 3: Dispatch best vehicles
+    # --------------------------------------------------------
+
+    dispatched = dispatch_vehicles(
+        predicted_demand,
+        available
+    )
+
+    # --------------------------------------------------------
+    # STEP 4: Return dispatch decision
+    # --------------------------------------------------------
 
     return {
-        "predicted_demand": request.predicted_demand,
-        "available_vehicles": len(available_vehicles),
-        "dispatched_vehicles": selected,
-        "count": len(selected)
+        "input": {
+            "hour": request.hour,
+            "day": request.day,
+            "weather": request.weather
+        },
+
+        "predicted_demand": predicted_demand,
+
+        "available_vehicles_before_dispatch": len(available),
+
+        "vehicles_dispatched": len(dispatched),
+
+        "dispatch_status": (
+            "fully_dispatched"
+            if len(dispatched) >= predicted_demand
+            else "partial_dispatch"
+        ),
+
+        "dispatched_vehicles": dispatched
     }

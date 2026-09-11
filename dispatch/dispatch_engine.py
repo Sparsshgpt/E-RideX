@@ -1,42 +1,42 @@
 def dispatch_vehicles(predicted_demand, vehicles):
     """
-    Select the best available e-rickshaws based on distance.
+    Intelligent vehicle dispatch engine.
 
-    predicted_demand: number of vehicles required
-    vehicles: list of vehicle dictionaries
+    Selection criteria:
+    1. Vehicle must be available.
+    2. Battery must be at least 30%.
+    3. Vehicle must have passenger capacity.
+    4. Nearest vehicles get priority.
+    5. Higher battery is preferred when distance is similar.
     """
 
-    # Only available vehicles can be dispatched
-    available = [
-        vehicle for vehicle in vehicles
+    MIN_BATTERY = 30
+    MIN_CAPACITY = 1
+
+    # Step 1: Filter suitable vehicles
+    suitable_vehicles = [
+        vehicle
+        for vehicle in vehicles
         if vehicle["status"] == "available"
+        and vehicle["battery"] >= MIN_BATTERY
+        and vehicle["capacity"] >= MIN_CAPACITY
     ]
 
-    # Nearest vehicles get priority
-    available.sort(key=lambda vehicle: vehicle["distance"])
+    # Step 2: Rank vehicles
+    # Distance is the primary factor.
+    # Battery is secondary.
+    suitable_vehicles.sort(
+        key=lambda vehicle: (
+            vehicle["distance"],
+            -vehicle["battery"]
+        )
+    )
 
-    # Select required number of vehicles
-    selected = available[:predicted_demand]
+    # Step 3: Select required vehicles
+    selected = suitable_vehicles[:predicted_demand]
+
+    # Step 4: Mark selected vehicles as busy
+    for vehicle in selected:
+        vehicle["status"] = "busy"
 
     return selected
-if __name__ == "__main__":
-
-    vehicles = [
-        {"id": "ER01", "status": "available", "distance": 0.8},
-        {"id": "ER02", "status": "available", "distance": 1.2},
-        {"id": "ER03", "status": "busy", "distance": 0.4},
-        {"id": "ER04", "status": "available", "distance": 2.1},
-        {"id": "ER05", "status": "available", "distance": 1.5}
-    ]
-
-    result = dispatch_vehicles(3, vehicles)
-
-    print("Dispatched vehicles:")
-
-    for vehicle in result:
-        print(
-            vehicle["id"],
-            "-",
-            vehicle["distance"],
-            "km"
-        )
