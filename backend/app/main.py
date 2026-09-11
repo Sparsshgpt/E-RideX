@@ -1,3 +1,4 @@
+from dispatch.dispatch_engine import dispatch_vehicles
 from fastapi import FastAPI
 from pydantic import BaseModel
 from ai.demand_predictor import predict_demand
@@ -11,6 +12,9 @@ class DemandRequest(BaseModel):
     hour: int
     day: int
     weather: int = 0
+class DispatchRequest(BaseModel):
+    predicted_demand: int
+    vehicles: list
 
 
 @app.get("/")
@@ -37,4 +41,16 @@ def demand_prediction(request: DemandRequest):
 
     return {
         "predicted_demand": demand
+    }
+@app.post("/dispatch")
+def dispatch(request: DispatchRequest):
+
+    selected = dispatch_vehicles(
+        request.predicted_demand,
+        request.vehicles
+    )
+
+    return {
+        "dispatched_vehicles": selected,
+        "count": len(selected)
     }
