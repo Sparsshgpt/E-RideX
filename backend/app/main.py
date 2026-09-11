@@ -3,11 +3,12 @@ from pydantic import BaseModel
 
 from ai.demand_predictor import predict_demand
 
-from database.vehicle_data import (
+from database.database import (
     get_all_vehicles,
     get_available_vehicles,
     get_vehicle
 )
+
 
 from dispatch.dispatch_engine import dispatch_vehicles
 
