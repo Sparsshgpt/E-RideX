@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>E-RideX Admin Dashboard</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+</head>
+
+
+<body>
+
+
+    <header>
+
+        <div>
+            <h1>E-RideX</h1>
+        </div>
+
+        <div class="status">
+            <span></span>
+            System Online
+        </div>
+
+    </header>
+
+
+
+    <main>
+
+
+        <!-- Dashboard Header -->
+
+        <section class="dashboard-header">
+
+            <div>
+
+                <h2>
+                    Transportation Dashboard
+                </h2>
+
+                <p>
+                    Real-time campus mobility and service analytics
+                </p>
+
+            </div>
+
+
+            <button
+                id="refreshButton"
+                onclick="loadDashboard()"
+            >
+                Refresh
+            </button>
+
+        </section>
+
+
+
+        <!-- Main Statistics -->
+
+        <section class="stats-grid">
+
+
+            <div class="stat-card">
+
+                <h3>Total Vehicles</h3>
+
+                <div id="totalVehicles">
+                    -
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>Available Vehicles</h3>
+
+                <div id="availableVehicles">
+                    -
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>Busy Vehicles</h3>
+
+                <div id="busyVehicles">
+                    -
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>Total Requests</h3>
+
+                <div id="totalRequests">
+                    -
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>Unanswered Requests</h3>
+
+                <div id="unansweredRequests">
+                    -
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>Average Wait Time</h3>
+
+                <div id="averageWait">
+                    -
+                </div>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <h3>Predicted Demand</h3>
+
+                <div id="predictedDemand">
+                    -
+                </div>
+
+            </div>
+
+
+        </section>
+
+
+
+        <!-- AI Model Performance -->
+
+        <section class="analytics-section">
+
+            <div class="section-header">
+
+                <h2>
+                    AI Model Performance
+                </h2>
+
+                <p>
+                    Random Forest model used for campus ride demand prediction
+                </p>
+
+            </div>
+
+
+            <div class="model-info-grid">
+
+
+                <div class="model-info-item">
+
+                    <span>
+                        Algorithm
+                    </span>
+
+                    <strong id="modelAlgorithm">
+                        -
+                    </strong>
+
+                </div>
+
+
+                <div class="model-info-item">
+
+                    <span>
+                        Dataset
+                    </span>
+
+                    <strong id="modelDataset">
+                        -
+                    </strong>
+
+                </div>
+
+
+                <div class="model-info-item">
+
+                    <span>
+                        Training Rows
+                    </span>
+
+                    <strong id="modelTraining">
+                        -
+                    </strong>
+
+                </div>
+
+
+                <div class="model-info-item">
+
+                    <span>
+                        Testing Rows
+                    </span>
+
+                    <strong id="modelTesting">
+                        -
+                    </strong>
+
+                </div>
+
+
+                <div class="model-info-item">
+
+                    <span>
+                        MAE
+                    </span>
+
+                    <strong id="modelMAE">
+                        -
+                    </strong>
+
+                </div>
+
+
+                <div class="model-info-item">
+
+                    <span>
+                        R² Score
+                    </span>
+
+                    <strong id="modelR2">
+                        -
+                    </strong>
+
+                </div>
+
+
+            </div>
+
+        </section>
+
+
+
+        <!-- Ride Request Simulator -->
+
+        <section class="analytics-section">
+
+
+            <div class="section-header">
+
+                <h2>
+                    Ride Request
+                </h2>
+
+                <p>
+                    Submit a campus ride request and find the best available e-rickshaw
+                </p>
+
+            </div>
+
+
+            <div class="request-form">
+
+
+                <div class="form-group">
+
+                    <label for="passengerId">
+                        Passenger ID
+                    </label>
+
+                    <input
+                        type="text"
+                        id="passengerId"
+                        placeholder="e.g. STU101"
+                    >
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label for="pickupLocation">
+                        Pickup Location
+                    </label>
+
+                    <select id="pickupLocation">
+
+                        <option value="Main Gate">
+                            Main Gate
+                        </option>
+
+                        <option value="Library">
+                            Library
+                        </option>
+
+                        <option value="Hostel">
+                            Hostel
+                        </option>
+
+                        <option value="Academic Block">
+                            Academic Block
+                        </option>
+
+                        <option value="Canteen">
+                            Canteen
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div class="form-group">
+
+                    <label for="destination">
+                        Destination
+                    </label>
+
+                    <select id="destination">
+
+                        <option value="Main Gate">
+                            Main Gate
+                        </option>
+
+                        <option value="Library">
+                            Library
+                        </option>
+
+                        <option value="Hostel">
+                            Hostel
+                        </option>
+
+                        <option value="Academic Block">
+                            Academic Block
+                        </option>
+
+                        <option value="Canteen">
+                            Canteen
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <button
+                    id="requestRideButton"
+                    onclick="submitRideRequest()"
+                >
+                    Find E-Rickshaw
+                </button>
+
+
+            </div>
+
+
+            <div
+                id="rideResult"
+                class="ride-result"
+            >
+            </div>
+
+
+        </section>
+
+
+
+        <!-- Route Analytics -->
+
+        <section class="analytics-section">
+
+
+            <div class="section-header">
+
+                <h2>
+                    Route Service Analytics
+                </h2>
+
+                <p>
+                    Identify frequently requested and poorly serviced routes
+                </p>
+
+            </div>
+
+
+            <div
+                id="routeAnalytics"
+                class="route-container"
+            >
+
+                Loading analytics...
+
+            </div>
+
+
+        </section>
+
+
+    </main>
+
+
+
+    <footer>
+
+        <p>
+            E-RideX © 2026 | AI-Based Campus Transportation System
+        </p>
+
+    </footer>
+
+
+
+    <script src="app.js"></script>
+
+
+</body>
+
+</html>

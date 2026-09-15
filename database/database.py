@@ -2,9 +2,17 @@ import sqlite3
 from pathlib import Path
 
 
+# ============================================================
+# DATABASE CONFIGURATION
+# ============================================================
+
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "eridex.db"
 
+
+# ============================================================
+# DATABASE CONNECTION
+# ============================================================
 
 def get_connection():
     connection = sqlite3.connect(DB_PATH)
@@ -12,9 +20,17 @@ def get_connection():
     return connection
 
 
+# ============================================================
+# CREATE TABLES
+# ============================================================
+
 def create_tables():
     connection = get_connection()
     cursor = connection.cursor()
+
+    # --------------------------------------------------------
+    # VEHICLES TABLE
+    # --------------------------------------------------------
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS vehicles (
@@ -28,9 +44,31 @@ def create_tables():
         )
     """)
 
+    # --------------------------------------------------------
+    # RIDE REQUESTS TABLE
+    # --------------------------------------------------------
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ride_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            passenger_id TEXT NOT NULL,
+            pickup_latitude REAL NOT NULL,
+            pickup_longitude REAL NOT NULL,
+            destination TEXT NOT NULL,
+            status TEXT NOT NULL,
+            assigned_vehicle_id TEXT,
+            search_radius_km REAL,
+            estimated_wait_minutes REAL
+        )
+    """)
+
     connection.commit()
     connection.close()
 
+
+# ============================================================
+# VEHICLE FUNCTIONS
+# ============================================================
 
 def insert_vehicle(
     vehicle_id,
@@ -67,6 +105,7 @@ def get_all_vehicles():
     cursor = connection.cursor()
 
     cursor.execute("SELECT * FROM vehicles")
+
     rows = cursor.fetchall()
 
     connection.close()
@@ -122,3 +161,68 @@ def get_vehicle(vehicle_id):
         return dict(row)
 
     return None
+
+
+# ============================================================
+# RIDE REQUEST FUNCTIONS
+# ============================================================
+
+def create_ride_request(
+    passenger_id,
+    pickup_latitude,
+    pickup_longitude,
+    destination,
+    status,
+    assigned_vehicle_id=None,
+    search_radius_km=0,
+    estimated_wait_minutes=None
+):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO ride_requests (
+            passenger_id,
+            pickup_latitude,
+            pickup_longitude,
+            destination,
+            status,
+            assigned_vehicle_id,
+            search_radius_km,
+            estimated_wait_minutes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (
+        passenger_id,
+        pickup_latitude,
+        pickup_longitude,
+        destination,
+        status,
+        assigned_vehicle_id,
+        search_radius_km,
+        estimated_wait_minutes
+    ))
+
+    request_id = cursor.lastrowid
+
+    connection.commit()
+    connection.close()
+
+    return request_id
+
+
+def get_all_ride_requests():
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM ride_requests
+        ORDER BY id DESC
+    """)
+
+    rows = cursor.fetchall()
+
+    connection.close()
+
+    return [dict(row) for row in rows]
