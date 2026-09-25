@@ -1,12 +1,164 @@
 const API = "http://127.0.0.1:8000";
 
 let pendingRide = null;
+let vehicleMap = null;
+let vehicleMarkers = {};
 
+
+// ======================================================
+// LIVE VEHICLE MAP
+// ======================================================
+
+function initializeVehicleMap() {
+
+    const mapContainer =
+        document.getElementById("vehicleMap");
+
+    if (!mapContainer) {
+        return;
+    }
+
+    if (vehicleMap) {
+        return;
+    }
+
+    vehicleMap = L.map("vehicleMap").setView(
+        [31.250844, 75.705091],
+        15
+    );
+
+    L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            maxZoom: 19,
+            attribution:
+                "&copy; OpenStreetMap contributors"
+        }
+    ).addTo(vehicleMap);
+}
+
+
+function updateVehicleMap(vehicles) {
+
+    initializeVehicleMap();
+
+    if (!vehicleMap) {
+        return;
+    }
+
+    vehicles.forEach(vehicle => {
+
+        const latitude =
+            Number(vehicle.latitude);
+
+        const longitude =
+            Number(vehicle.longitude);
+
+        const position = [
+            latitude,
+            longitude
+        ];
+
+        const status =
+            vehicle.status;
+
+        const iconColor =
+            status === "available"
+                ? "green"
+                : "red";
+
+        const markerIcon =
+            L.divIcon({
+
+                className:
+                    "vehicle-marker",
+
+                html: `
+                    <div
+                        style="
+                            width:18px;
+                            height:18px;
+                            border-radius:50%;
+                            background:${iconColor};
+                            border:3px solid white;
+                            box-shadow:0 1px 5px rgba(0,0,0,0.35);
+                        "
+                    ></div>
+                `,
+
+                iconSize: [
+                    18,
+                    18
+                ],
+
+                iconAnchor: [
+                    9,
+                    9
+                ]
+            });
+
+
+        if (vehicleMarkers[vehicle.id]) {
+
+            vehicleMarkers[
+                vehicle.id
+            ].setLatLng(position);
+
+            vehicleMarkers[
+                vehicle.id
+            ].setIcon(markerIcon);
+
+        } else {
+
+            const marker =
+                L.marker(
+                    position,
+                    {
+                        icon: markerIcon
+                    }
+                ).addTo(vehicleMap);
+
+
+            marker.bindPopup(`
+                <strong>
+                    ${vehicle.id}
+                </strong>
+
+                <br>
+
+                Status:
+                ${vehicle.status}
+
+                <br>
+
+                Battery:
+                ${vehicle.battery}%
+
+                <br>
+
+                Capacity:
+                ${vehicle.capacity}
+            `);
+
+
+            vehicleMarkers[
+                vehicle.id
+            ] = marker;
+        }
+    });
+}
+
+
+// ======================================================
+// DASHBOARD
+// ======================================================
 
 async function loadDashboard() {
 
     const status =
-        document.getElementById("routeAnalytics");
+        document.getElementById(
+            "routeAnalytics"
+        );
 
     try {
 
@@ -14,92 +166,127 @@ async function loadDashboard() {
             "<p>Loading dashboard data...</p>";
 
 
+        // VEHICLES
         const vehiclesResponse =
-            await fetch(`${API}/vehicles`);
+            await fetch(
+                `${API}/vehicles`
+            );
+
 
         if (!vehiclesResponse.ok) {
+
             throw new Error(
                 `Vehicles API returned ${vehiclesResponse.status}`
             );
         }
 
+
         const vehiclesData =
             await vehiclesResponse.json();
 
 
+        // RIDE REQUESTS
         const requestsResponse =
-            await fetch(`${API}/ride-requests`);
+            await fetch(
+                `${API}/ride-requests`
+            );
+
 
         if (!requestsResponse.ok) {
+
             throw new Error(
                 `Requests API returned ${requestsResponse.status}`
             );
         }
 
+
         const requestsData =
             await requestsResponse.json();
 
 
+        // ROUTE ANALYTICS
         const analyticsResponse =
-            await fetch(`${API}/analytics/routes`);
+            await fetch(
+                `${API}/analytics/routes`
+            );
+
 
         if (!analyticsResponse.ok) {
+
             throw new Error(
                 `Analytics API returned ${analyticsResponse.status}`
             );
         }
 
+
         const analyticsData =
             await analyticsResponse.json();
 
 
+        // MODEL INFORMATION
         const modelResponse =
-            await fetch(`${API}/model-info`);
+            await fetch(
+                `${API}/model-info`
+            );
+
 
         if (!modelResponse.ok) {
+
             throw new Error(
                 `Model API returned ${modelResponse.status}`
             );
         }
 
+
         const modelData =
             await modelResponse.json();
 
 
-        const now = new Date();
+        // CURRENT TIME
+        const now =
+            new Date();
+
 
         const hour =
             now.getHours();
 
+
         const javascriptDay =
             now.getDay();
+
 
         const day =
             javascriptDay === 0
                 ? 6
                 : javascriptDay - 1;
 
+
         const weather = 0;
 
 
+        // DEMAND PREDICTION
         const demandResponse =
-            await fetch(`${API}/predict-demand`, {
+            await fetch(
+                `${API}/predict-demand`,
+                {
+                    method: "POST",
 
-                method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    hour: hour,
-                    day: day,
-                    weather: weather
-                })
-            });
+                    body: JSON.stringify({
+                        hour: hour,
+                        day: day,
+                        weather: weather
+                    })
+                }
+            );
 
 
         if (!demandResponse.ok) {
+
             throw new Error(
                 `Demand API returned ${demandResponse.status}`
             );
@@ -110,7 +297,13 @@ async function loadDashboard() {
             await demandResponse.json();
 
 
+        // UPDATE DASHBOARD
         updateVehicleStats(
+            vehiclesData.vehicles
+        );
+
+
+        updateVehicleMap(
             vehiclesData.vehicles
         );
 
@@ -153,7 +346,13 @@ async function loadDashboard() {
 }
 
 
-function updateVehicleStats(vehicles) {
+// ======================================================
+// VEHICLE STATISTICS
+// ======================================================
+
+function updateVehicleStats(
+    vehicles
+) {
 
     const total =
         vehicles.length;
@@ -192,7 +391,13 @@ function updateVehicleStats(vehicles) {
 }
 
 
-function updateRequestStats(requests) {
+// ======================================================
+// REQUEST STATISTICS
+// ======================================================
+
+function updateRequestStats(
+    requests
+) {
 
     const total =
         requests.length;
@@ -258,7 +463,13 @@ function updateRequestStats(requests) {
 }
 
 
-function updatePredictedDemand(demand) {
+// ======================================================
+// DEMAND
+// ======================================================
+
+function updatePredictedDemand(
+    demand
+) {
 
     document.getElementById(
         "predictedDemand"
@@ -267,7 +478,13 @@ function updatePredictedDemand(demand) {
 }
 
 
-function updateModelInfo(model) {
+// ======================================================
+// MODEL INFORMATION
+// ======================================================
+
+function updateModelInfo(
+    model
+) {
 
     const algorithm =
         document.getElementById(
@@ -348,12 +565,50 @@ function updateModelInfo(model) {
 }
 
 
+// ======================================================
+// LPU CAMPUS LOCATIONS
+// ======================================================
+
+const locations = {
+
+    "Main Gate": {
+        latitude: 31.250844,
+        longitude: 75.705091
+    },
+
+    "Library": {
+        latitude: 31.253000,
+        longitude: 75.707000
+    },
+
+    "Hostel": {
+        latitude: 31.247500,
+        longitude: 75.709000
+    },
+
+    "Academic Block": {
+        latitude: 31.255000,
+        longitude: 75.703000
+    },
+
+    "Canteen": {
+        latitude: 31.249000,
+        longitude: 75.702500
+    }
+};
+
+
+// ======================================================
+// RIDE REQUEST
+// ======================================================
+
 async function submitRideRequest() {
 
     const passengerId =
-        document.getElementById(
-            "passengerId"
-        ).value.trim();
+        document
+            .getElementById("passengerId")
+            .value
+            .trim();
 
 
     const pickupLocation =
@@ -383,37 +638,17 @@ async function submitRideRequest() {
     }
 
 
-    const locations = {
-
-        "Main Gate": {
-            latitude: 28.6139,
-            longitude: 77.2090
-        },
-
-        "Library": {
-            latitude: 28.6150,
-            longitude: 77.2105
-        },
-
-        "Hostel": {
-            latitude: 28.6170,
-            longitude: 77.2120
-        },
-
-        "Academic Block": {
-            latitude: 28.6200,
-            longitude: 77.2150
-        },
-
-        "Canteen": {
-            latitude: 28.6115,
-            longitude: 77.2075
-        }
-    };
-
-
     const pickup =
         locations[pickupLocation];
+
+
+    if (!pickup) {
+
+        result.innerHTML =
+            "<p>Invalid pickup location.</p>";
+
+        return;
+    }
 
 
     result.innerHTML =
@@ -423,29 +658,31 @@ async function submitRideRequest() {
     try {
 
         const response =
-            await fetch(`${API}/ride-request`, {
+            await fetch(
+                `${API}/ride-request`,
+                {
+                    method: "POST",
 
-                method: "POST",
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
 
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                    body: JSON.stringify({
+                        passenger_id:
+                            passengerId,
 
-                body: JSON.stringify({
+                        pickup_latitude:
+                            pickup.latitude,
 
-                    passenger_id:
-                        passengerId,
+                        pickup_longitude:
+                            pickup.longitude,
 
-                    pickup_latitude:
-                        pickup.latitude,
-
-                    pickup_longitude:
-                        pickup.longitude,
-
-                    destination:
-                        destination
-                })
-            });
+                        destination:
+                            destination
+                    })
+                }
+            );
 
 
         if (!response.ok) {
@@ -508,18 +745,22 @@ async function submitRideRequest() {
 
                     <p>
                         Distance:
-                        ${data.driver.distance_km} km
+                        ${data.driver.distance_km}
+                        km
                     </p>
 
                     <p>
                         Estimated Wait:
-                        ${data.driver.estimated_wait_minutes} min
+                        ${data.driver.estimated_wait_minutes}
+                        min
                     </p>
 
                     <p>
                         Search Radius:
-                        ${data.search_radius_km} km
+                        ${data.search_radius_km}
+                        km
                     </p>
+
 
                     <div class="ride-actions">
 
@@ -529,6 +770,7 @@ async function submitRideRequest() {
                         >
                             Confirm Ride
                         </button>
+
 
                         <button
                             id="cancelRideButton"
@@ -558,7 +800,8 @@ async function submitRideRequest() {
 
                     <p>
                         Search Radius:
-                        ${data.search_radius_km} km
+                        ${data.search_radius_km}
+                        km
                     </p>
 
                 </div>
@@ -574,17 +817,15 @@ async function submitRideRequest() {
         );
 
 
-        result.innerHTML = `
-
-            <p>
-                Ride request failed:
-                ${error.message}
-            </p>
-
-        `;
+        result.innerHTML =
+            `<p>Ride request failed: ${error.message}</p>`;
     }
 }
 
+
+// ======================================================
+// CONFIRM RIDE
+// ======================================================
 
 async function confirmRide() {
 
@@ -612,7 +853,8 @@ async function confirmRide() {
                     method: "POST",
 
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type":
+                            "application/json"
                     },
 
                     body: JSON.stringify({
@@ -644,6 +886,7 @@ async function confirmRide() {
             const errorData =
                 await response.json();
 
+
             throw new Error(
                 errorData.detail ||
                 `Confirmation failed: ${response.status}`
@@ -670,12 +913,14 @@ async function confirmRide() {
 
                 <p>
                     Distance:
-                    ${pendingRide.distance} km
+                    ${pendingRide.distance}
+                    km
                 </p>
 
                 <p>
                     Estimated Wait:
-                    ${pendingRide.waitTime} min
+                    ${pendingRide.waitTime}
+                    min
                 </p>
 
                 <p>
@@ -701,17 +946,15 @@ async function confirmRide() {
         );
 
 
-        result.innerHTML = `
-
-            <p>
-                Ride confirmation failed:
-                ${error.message}
-            </p>
-
-        `;
+        result.innerHTML =
+            `<p>Ride confirmation failed: ${error.message}</p>`;
     }
 }
 
+
+// ======================================================
+// CANCEL RIDE
+// ======================================================
 
 function cancelRide() {
 
@@ -724,15 +967,18 @@ function cancelRide() {
     pendingRide = null;
 
 
-    result.innerHTML = `
-        <p>
-            Ride request cancelled.
-        </p>
-    `;
+    result.innerHTML =
+        "<p>Ride request cancelled.</p>";
 }
 
 
-function updateRouteAnalytics(routes) {
+// ======================================================
+// ROUTE ANALYTICS
+// ======================================================
+
+function updateRouteAnalytics(
+    routes
+) {
 
     const container =
         document.getElementById(
@@ -752,93 +998,95 @@ function updateRouteAnalytics(routes) {
     }
 
 
-    routes.forEach(route => {
+    routes.forEach(
+        route => {
 
-        const card =
-            document.createElement(
-                "div"
+            const card =
+                document.createElement(
+                    "div"
+                );
+
+
+            card.className =
+                "route-card";
+
+
+            card.innerHTML = `
+
+                <h3>
+                    ${route.route}
+                </h3>
+
+
+                <div class="route-info">
+
+                    <div>
+                        Requests
+
+                        <strong>
+                            ${route.total_requests}
+                        </strong>
+                    </div>
+
+
+                    <div>
+                        Assigned
+
+                        <strong>
+                            ${route.assigned_requests}
+                        </strong>
+                    </div>
+
+
+                    <div>
+                        Unanswered
+
+                        <strong>
+                            ${route.unanswered_requests}
+                        </strong>
+                    </div>
+
+
+                    <div>
+                        Service Rate
+
+                        <strong>
+                            ${route.service_rate_percent}%
+                        </strong>
+                    </div>
+
+                </div>
+
+
+                <span
+                    class="service-level service-${route.service_level}"
+                >
+                    ${route.service_level.toUpperCase()}
+                </span>
+
+            `;
+
+
+            container.appendChild(
+                card
             );
-
-
-        card.className =
-            "route-card";
-
-
-        card.innerHTML = `
-
-            <h3>
-                ${route.route}
-            </h3>
-
-            <div class="route-info">
-
-                <div>
-
-                    Requests
-
-                    <strong>
-                        ${route.total_requests}
-                    </strong>
-
-                </div>
-
-
-                <div>
-
-                    Assigned
-
-                    <strong>
-                        ${route.assigned_requests}
-                    </strong>
-
-                </div>
-
-
-                <div>
-
-                    Unanswered
-
-                    <strong>
-                        ${route.unanswered_requests}
-                    </strong>
-
-                </div>
-
-
-                <div>
-
-                    Service Rate
-
-                    <strong>
-                        ${route.service_rate_percent}%
-                    </strong>
-
-                </div>
-
-            </div>
-
-
-            <span
-                class="service-level service-${route.service_level}"
-            >
-
-                ${route.service_level.toUpperCase()}
-
-            </span>
-
-        `;
-
-
-        container.appendChild(
-            card
-        );
-
-    });
+        }
+    );
 }
 
 
+// ======================================================
+// START APPLICATION
+// ======================================================
+
+initializeVehicleMap();
+
 loadDashboard();
 
+
+// ======================================================
+// AUTO REFRESH
+// ======================================================
 
 setInterval(
     loadDashboard,

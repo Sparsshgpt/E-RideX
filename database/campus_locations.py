@@ -1,32 +1,35 @@
 CAMPUS_LOCATIONS = {
     "Main Gate": {
-        "latitude": 28.6139,
-        "longitude": 77.2090
+        "latitude": 31.250844,
+        "longitude": 75.705091
     },
     "Library": {
-        "latitude": 28.6150,
-        "longitude": 77.2105
+        "latitude": 31.253000,
+        "longitude": 75.707000
     },
     "Hostel": {
-        "latitude": 28.6170,
-        "longitude": 77.2120
+        "latitude": 31.247500,
+        "longitude": 75.709000
     },
     "Academic Block": {
-        "latitude": 28.6200,
-        "longitude": 77.2150
+        "latitude": 31.255000,
+        "longitude": 75.703000
     },
     "Canteen": {
-        "latitude": 28.6115,
-        "longitude": 77.2075
+        "latitude": 31.249000,
+        "longitude": 75.702500
     }
 }
 
 
 def get_location_name(latitude, longitude):
+
     for name, location in CAMPUS_LOCATIONS.items():
+
         if (
             abs(latitude - location["latitude"]) < 0.001
-            and abs(longitude - location["longitude"]) < 0.001
+            and
+            abs(longitude - location["longitude"]) < 0.001
         ):
             return name
 

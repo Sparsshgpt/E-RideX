@@ -1,115 +1,53 @@
-# --------------------------------------------------
-# E-RideX Vehicle Data
-# --------------------------------------------------
+VEHICLES = [
 
-vehicles = [
     {
         "id": "ER01",
         "status": "available",
-        "latitude": 28.6139,
-        "longitude": 77.2090,
-        "distance": 0.8,
+        "latitude": 31.2515,
+        "longitude": 75.7045,
+        "distance": 0.3,
         "battery": 92,
         "capacity": 4
     },
+
     {
         "id": "ER02",
         "status": "available",
-        "latitude": 28.6150,
-        "longitude": 77.2105,
-        "distance": 1.2,
+        "latitude": 31.2530,
+        "longitude": 75.7065,
+        "distance": 0.5,
+        "battery": 85,
+        "capacity": 4
+    },
+
+    {
+        "id": "ER03",
+        "status": "available",
+        "latitude": 31.2485,
+        "longitude": 75.7075,
+        "distance": 0.7,
         "battery": 78,
         "capacity": 4
     },
-    {
-        "id": "ER03",
-        "status": "busy",
-        "latitude": 28.6170,
-        "longitude": 77.2120,
-        "distance": 0.4,
-        "battery": 61,
-        "capacity": 4
-    },
+
     {
         "id": "ER04",
         "status": "available",
-        "latitude": 28.6200,
-        "longitude": 77.2150,
-        "distance": 2.1,
-        "battery": 45,
+        "latitude": 31.2550,
+        "longitude": 75.7035,
+        "distance": 1.0,
+        "battery": 88,
         "capacity": 4
     },
+
     {
         "id": "ER05",
         "status": "available",
-        "latitude": 28.6115,
-        "longitude": 77.2075,
-        "distance": 1.5,
-        "battery": 88,
+        "latitude": 31.2475,
+        "longitude": 75.7015,
+        "distance": 1.2,
+        "battery": 65,
         "capacity": 4
     }
+
 ]
-
-
-# --------------------------------------------------
-# Get all vehicles
-# --------------------------------------------------
-
-def get_all_vehicles():
-    return vehicles
-
-
-# --------------------------------------------------
-# Get available vehicles
-# --------------------------------------------------
-
-def get_available_vehicles():
-    return [
-        vehicle
-        for vehicle in vehicles
-        if vehicle["status"] == "available"
-    ]
-
-
-# --------------------------------------------------
-# Get vehicle by ID
-# --------------------------------------------------
-
-def get_vehicle(vehicle_id):
-    for vehicle in vehicles:
-        if vehicle["id"] == vehicle_id:
-            return vehicle
-
-    return None
-
-
-# --------------------------------------------------
-# Update vehicle status
-# --------------------------------------------------
-
-def update_vehicle_status(vehicle_id, status):
-
-    vehicle = get_vehicle(vehicle_id)
-
-    if vehicle is None:
-        return None
-
-    vehicle["status"] = status
-
-    return vehicle
-
-
-# --------------------------------------------------
-# Mark vehicle as busy
-# --------------------------------------------------
-
-def mark_vehicle_busy(vehicle_id):
-
-    vehicle = get_vehicle(vehicle_id)
-
-    if vehicle is None:
-        return None
-
-    vehicle["status"] = "busy"
-
-    return vehicle
