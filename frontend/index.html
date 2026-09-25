@@ -19,10 +19,8 @@
 
     <!-- Leaflet Map -->
     <link
-        <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
->
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     >
 
 </head>
@@ -34,16 +32,20 @@
     <header>
 
         <div>
+
             <h1>E-RideX</h1>
+
         </div>
 
         <div class="status">
+
             <span></span>
+
             System Online
+
         </div>
 
     </header>
-
 
 
     <main>
@@ -70,11 +72,12 @@
                 id="refreshButton"
                 onclick="loadDashboard()"
             >
+
                 Refresh
+
             </button>
 
         </section>
-
 
 
         <!-- Main Statistics -->
@@ -160,7 +163,6 @@
 
 
         </section>
-
 
 
         <!-- AI Model Performance -->
@@ -266,7 +268,6 @@
         </section>
 
 
-
         <!-- Live Vehicle Map -->
 
         <section class="analytics-section">
@@ -286,9 +287,36 @@
 
             <div id="vehicleMap"></div>
 
-
         </section>
 
+
+        <!-- Vehicle Status Management -->
+
+        <section class="analytics-section">
+
+            <div class="section-header">
+
+                <h2>
+                    🚕 Vehicle Status Management
+                </h2>
+
+                <p>
+                    Monitor and update the operational status of campus e-rickshaws
+                </p>
+
+            </div>
+
+
+            <div
+                id="vehicleStatusList"
+                class="vehicle-status-list"
+            >
+
+                Loading vehicle statuses...
+
+            </div>
+
+        </section>
 
 
         <!-- Ride Request Simulator -->
@@ -397,7 +425,9 @@
                     id="requestRideButton"
                     onclick="submitRideRequest()"
                 >
+
                     Find E-Rickshaw
+
                 </button>
 
 
@@ -408,11 +438,11 @@
                 id="rideResult"
                 class="ride-result"
             >
+
             </div>
 
 
         </section>
-
 
 
         <!-- Route Analytics -->
@@ -449,7 +479,6 @@
     </main>
 
 
-
     <footer>
 
         <p>
@@ -457,7 +486,6 @@
         </p>
 
     </footer>
-
 
 
     <!-- Leaflet JavaScript -->

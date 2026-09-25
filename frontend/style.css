@@ -498,3 +498,47 @@ footer {
     height: 100%;
     font-family: Arial, sans-serif;
 }
+.vehicle-status-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    padding: 20px 0;
+}
+
+.vehicle-status-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding: 18px;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+}
+
+.vehicle-status-info strong {
+    display: block;
+    font-size: 20px;
+    margin-bottom: 8px;
+}
+
+.vehicle-status-info p {
+    margin: 4px 0;
+    color: #555;
+    font-size: 14px;
+}
+
+.vehicle-status-control select {
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: white;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.vehicle-status-control select:focus {
+    outline: none;
+    border-color: #2563eb;
+}
