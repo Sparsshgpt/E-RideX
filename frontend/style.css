@@ -365,3 +365,123 @@ footer {
     }
 
 }
+.request-form {
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 16px;
+    align-items: end;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.form-group label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #475569;
+}
+
+.form-group input,
+.form-group select {
+    height: 38px;
+    padding: 0 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    background: #ffffff;
+    color: #111827;
+    font-size: 13px;
+    outline: none;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: #64748b;
+}
+
+#requestRideButton {
+    height: 38px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 5px;
+    background: #111827;
+    color: #ffffff;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#requestRideButton:hover {
+    background: #374151;
+}
+
+.ride-result {
+    margin: 0 20px 20px;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    background: #f8fafc;
+    font-size: 13px;
+    color: #475569;
+}
+
+.ride-result:empty {
+    display: none;
+}
+
+.ride-result strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #111827;
+    font-size: 14px;
+}
+
+.ride-result p {
+    margin: 5px 0;
+}
+
+@media (max-width: 900px) {
+    .request-form {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .request-form {
+        grid-template-columns: 1fr;
+    }
+}
+.ride-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.ride-actions button {
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 5px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#confirmRideButton {
+    background: #111827;
+    color: #ffffff;
+    border: 1px solid #111827;
+}
+
+#confirmRideButton:hover {
+    background: #374151;
+}
+
+#cancelRideButton {
+    background: #ffffff;
+    color: #475569;
+    border: 1px solid #d1d5db;
+}
+
+#cancelRideButton:hover {
+    background: #f8fafc;
+}

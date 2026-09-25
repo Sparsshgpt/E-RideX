@@ -1,5 +1,7 @@
 const API = "http://127.0.0.1:8000";
 
+let pendingRide = null;
+
 
 async function loadDashboard() {
 
@@ -82,10 +84,13 @@ async function loadDashboard() {
 
         const demandResponse =
             await fetch(`${API}/predict-demand`, {
+
                 method: "POST",
+
                 headers: {
                     "Content-Type": "application/json"
                 },
+
                 body: JSON.stringify({
                     hour: hour,
                     day: day,
@@ -136,6 +141,7 @@ async function loadDashboard() {
             "Dashboard error:",
             error
         );
+
 
         status.innerHTML = `
             <p>
@@ -268,25 +274,30 @@ function updateModelInfo(model) {
             "modelAlgorithm"
         );
 
+
     const dataset =
         document.getElementById(
             "modelDataset"
         );
+
 
     const training =
         document.getElementById(
             "modelTraining"
         );
 
+
     const testing =
         document.getElementById(
             "modelTesting"
         );
 
+
     const mae =
         document.getElementById(
             "modelMAE"
         );
+
 
     const r2 =
         document.getElementById(
@@ -295,39 +306,429 @@ function updateModelInfo(model) {
 
 
     if (algorithm) {
+
         algorithm.textContent =
             model.algorithm;
     }
 
 
     if (dataset) {
+
         dataset.textContent =
             model.dataset_rows;
     }
 
 
     if (training) {
+
         training.textContent =
             model.training_rows;
     }
 
 
     if (testing) {
+
         testing.textContent =
             model.testing_rows;
     }
 
 
     if (mae) {
+
         mae.textContent =
             model.mae;
     }
 
 
     if (r2) {
+
         r2.textContent =
             model.r2_score;
     }
+}
+
+
+async function submitRideRequest() {
+
+    const passengerId =
+        document.getElementById(
+            "passengerId"
+        ).value.trim();
+
+
+    const pickupLocation =
+        document.getElementById(
+            "pickupLocation"
+        ).value;
+
+
+    const destination =
+        document.getElementById(
+            "destination"
+        ).value;
+
+
+    const result =
+        document.getElementById(
+            "rideResult"
+        );
+
+
+    if (!passengerId) {
+
+        result.innerHTML =
+            "<p>Please enter a Passenger ID.</p>";
+
+        return;
+    }
+
+
+    const locations = {
+
+        "Main Gate": {
+            latitude: 28.6139,
+            longitude: 77.2090
+        },
+
+        "Library": {
+            latitude: 28.6150,
+            longitude: 77.2105
+        },
+
+        "Hostel": {
+            latitude: 28.6170,
+            longitude: 77.2120
+        },
+
+        "Academic Block": {
+            latitude: 28.6200,
+            longitude: 77.2150
+        },
+
+        "Canteen": {
+            latitude: 28.6115,
+            longitude: 77.2075
+        }
+    };
+
+
+    const pickup =
+        locations[pickupLocation];
+
+
+    result.innerHTML =
+        "<p>Finding the best available e-rickshaw...</p>";
+
+
+    try {
+
+        const response =
+            await fetch(`${API}/ride-request`, {
+
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+
+                    passenger_id:
+                        passengerId,
+
+                    pickup_latitude:
+                        pickup.latitude,
+
+                    pickup_longitude:
+                        pickup.longitude,
+
+                    destination:
+                        destination
+                })
+            });
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                `Ride API returned ${response.status}`
+            );
+        }
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            data.status ===
+            "driver_found"
+        ) {
+
+            pendingRide = {
+
+                passengerId:
+                    passengerId,
+
+                pickupLatitude:
+                    pickup.latitude,
+
+                pickupLongitude:
+                    pickup.longitude,
+
+                destination:
+                    destination,
+
+                vehicleId:
+                    data.driver.id,
+
+                distance:
+                    data.driver.distance_km,
+
+                waitTime:
+                    data.driver.estimated_wait_minutes,
+
+                searchRadius:
+                    data.search_radius_km
+            };
+
+
+            result.innerHTML = `
+
+                <div>
+
+                    <strong>
+                        Driver Found
+                    </strong>
+
+                    <p>
+                        Vehicle:
+                        ${data.driver.id}
+                    </p>
+
+                    <p>
+                        Distance:
+                        ${data.driver.distance_km} km
+                    </p>
+
+                    <p>
+                        Estimated Wait:
+                        ${data.driver.estimated_wait_minutes} min
+                    </p>
+
+                    <p>
+                        Search Radius:
+                        ${data.search_radius_km} km
+                    </p>
+
+                    <div class="ride-actions">
+
+                        <button
+                            id="confirmRideButton"
+                            onclick="confirmRide()"
+                        >
+                            Confirm Ride
+                        </button>
+
+                        <button
+                            id="cancelRideButton"
+                            onclick="cancelRide()"
+                        >
+                            Cancel
+                        </button>
+
+                    </div>
+
+                </div>
+            `;
+
+        } else {
+
+            result.innerHTML = `
+
+                <div>
+
+                    <strong>
+                        No Driver Available
+                    </strong>
+
+                    <p>
+                        ${data.message}
+                    </p>
+
+                    <p>
+                        Search Radius:
+                        ${data.search_radius_km} km
+                    </p>
+
+                </div>
+            `;
+        }
+
+
+    } catch (error) {
+
+        console.error(
+            "Ride request error:",
+            error
+        );
+
+
+        result.innerHTML = `
+
+            <p>
+                Ride request failed:
+                ${error.message}
+            </p>
+
+        `;
+    }
+}
+
+
+async function confirmRide() {
+
+    if (!pendingRide) {
+        return;
+    }
+
+
+    const result =
+        document.getElementById(
+            "rideResult"
+        );
+
+
+    result.innerHTML =
+        "<p>Confirming ride...</p>";
+
+
+    try {
+
+        const response =
+            await fetch(
+                `${API}/confirm-ride/${pendingRide.vehicleId}`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        passenger_id:
+                            pendingRide.passengerId,
+
+                        pickup_latitude:
+                            pendingRide.pickupLatitude,
+
+                        pickup_longitude:
+                            pendingRide.pickupLongitude,
+
+                        destination:
+                            pendingRide.destination,
+
+                        search_radius_km:
+                            pendingRide.searchRadius,
+
+                        estimated_wait_minutes:
+                            pendingRide.waitTime
+                    })
+                }
+            );
+
+
+        if (!response.ok) {
+
+            const errorData =
+                await response.json();
+
+            throw new Error(
+                errorData.detail ||
+                `Confirmation failed: ${response.status}`
+            );
+        }
+
+
+        const data =
+            await response.json();
+
+
+        result.innerHTML = `
+
+            <div>
+
+                <strong>
+                    Ride Confirmed
+                </strong>
+
+                <p>
+                    Vehicle:
+                    ${data.vehicle_id}
+                </p>
+
+                <p>
+                    Distance:
+                    ${pendingRide.distance} km
+                </p>
+
+                <p>
+                    Estimated Wait:
+                    ${pendingRide.waitTime} min
+                </p>
+
+                <p>
+                    Destination:
+                    ${pendingRide.destination}
+                </p>
+
+            </div>
+        `;
+
+
+        pendingRide = null;
+
+
+        await loadDashboard();
+
+
+    } catch (error) {
+
+        console.error(
+            "Confirmation error:",
+            error
+        );
+
+
+        result.innerHTML = `
+
+            <p>
+                Ride confirmation failed:
+                ${error.message}
+            </p>
+
+        `;
+    }
+}
+
+
+function cancelRide() {
+
+    const result =
+        document.getElementById(
+            "rideResult"
+        );
+
+
+    pendingRide = null;
+
+
+    result.innerHTML = `
+        <p>
+            Ride request cancelled.
+        </p>
+    `;
 }
 
 
@@ -364,6 +765,7 @@ function updateRouteAnalytics(routes) {
 
 
         card.innerHTML = `
+
             <h3>
                 ${route.route}
             </h3>
@@ -371,40 +773,59 @@ function updateRouteAnalytics(routes) {
             <div class="route-info">
 
                 <div>
+
                     Requests
+
                     <strong>
                         ${route.total_requests}
                     </strong>
+
                 </div>
 
+
                 <div>
+
                     Assigned
+
                     <strong>
                         ${route.assigned_requests}
                     </strong>
+
                 </div>
 
+
                 <div>
+
                     Unanswered
+
                     <strong>
                         ${route.unanswered_requests}
                     </strong>
+
                 </div>
 
+
                 <div>
+
                     Service Rate
+
                     <strong>
                         ${route.service_rate_percent}%
                     </strong>
+
                 </div>
 
             </div>
 
+
             <span
                 class="service-level service-${route.service_level}"
             >
+
                 ${route.service_level.toUpperCase()}
+
             </span>
+
         `;
 
 

@@ -1,8 +1,7 @@
 import math
 
 from database.database import (
-    get_available_vehicles,
-    update_vehicle_status
+    get_available_vehicles
 )
 
 
@@ -60,7 +59,6 @@ def estimate_wait_time(distance_km):
         distance_km / average_speed_kmh
     ) * 60
 
-    # Boarding/dispatch buffer
     wait_time = travel_time_minutes + 1
 
     return round(wait_time, 1)
@@ -83,6 +81,11 @@ def find_best_driver(
     Search starts at 1 km.
     If no driver is found, the radius expands
     automatically up to 5 km.
+
+    IMPORTANT:
+    The selected vehicle is NOT marked busy here.
+    The vehicle becomes busy only after the
+    passenger confirms the ride.
     """
 
     available_vehicles = get_available_vehicles()
@@ -92,6 +95,7 @@ def find_best_driver(
     # --------------------------------------------------------
 
     if not available_vehicles:
+
         return {
             "status": "no_driver",
             "message": "No available e-rickshaw",
@@ -120,11 +124,16 @@ def find_best_driver(
 
             if distance <= radius:
 
-                wait_time = estimate_wait_time(distance)
+                wait_time = estimate_wait_time(
+                    distance
+                )
 
                 candidates.append({
                     "vehicle": vehicle,
-                    "distance_km": round(distance, 3),
+                    "distance_km": round(
+                        distance,
+                        3
+                    ),
                     "estimated_wait_minutes": wait_time
                 })
 
@@ -134,29 +143,20 @@ def find_best_driver(
 
         if candidates:
 
-            # Nearest driver gets priority
             candidates.sort(
-                key=lambda x: x["distance_km"]
+                key=lambda x:
+                x["distance_km"]
             )
 
             best = candidates[0]
-
-            # Mark selected vehicle as busy
-            update_vehicle_status(
-                best["vehicle"]["id"],
-                "busy"
-            )
-
-            best["vehicle"]["status"] = "busy"
 
             return {
                 "status": "driver_found",
                 "search_radius_km": radius,
                 "driver": best["vehicle"],
                 "distance_km": best["distance_km"],
-                "estimated_wait_minutes": (
+                "estimated_wait_minutes":
                     best["estimated_wait_minutes"]
-                )
             }
 
         # ----------------------------------------------------
