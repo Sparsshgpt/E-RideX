@@ -1,5 +1,5 @@
 /**
- * E-RideX — Core Application Controller & Platform Integration
+ * E-RideX AI 2.0 — Production Core Application Controller
  * Brand: E-RideX | "Smarter Rides. Greener Tomorrow."
  */
 
@@ -34,17 +34,24 @@ const state = {
         interval_seconds: 3.0,
         step_count: 0
     },
-    // Passenger booking state
+    // Passenger Booking State
     pendingPassengerRide: null,
     activePassengerTrip: null,
-    // Driver console state
+    // Driver Console State
     currentDriverId: "DR01"
 };
 
+// Map instances & marker stores
 let dashboardMap = null;
 let fullMap = null;
+let passengerMap = null;
+let driverMap = null;
+
 let dashboardMarkers = {};
 let fullMapMarkers = {};
+let passengerMarkers = {};
+let driverMarkers = {};
+
 let forecastChartInstance = null;
 let refreshTimer = null;
 
@@ -58,13 +65,13 @@ document.addEventListener("DOMContentLoaded", () => {
     initMaps();
     initForecastChart();
     loadAllData();
+    updatePassengerFarePreview();
 
     // Auto-refresh data every 8 seconds
     refreshTimer = setInterval(() => {
-        loadAllData(true); // silent background update
+        loadAllData(true);
     }, 8000);
 
-    // Render initial Lucide icons
     if (window.lucide) {
         lucide.createIcons();
     }
@@ -85,7 +92,6 @@ function initClock() {
 }
 
 function initPopulateSelects() {
-    // Populate dispatch hour select (8 to 22)
     const dispatchSelect = document.getElementById("dispatchHourSelect");
     const predHourSelect = document.getElementById("predHourSelect");
     const currentHour = new Date().getHours();
@@ -108,7 +114,6 @@ function initPopulateSelects() {
         }
     }
 
-    // Set day select
     const daySelect = document.getElementById("predDaySelect");
     if (daySelect) {
         const todayWeekday = (new Date().getDay() + 6) % 7; // Monday = 0
@@ -123,7 +128,6 @@ function initPopulateSelects() {
 function switchNav(tabId) {
     state.currentTab = tabId;
 
-    // Update sidebar link active class
     document.querySelectorAll(".nav-link").forEach(btn => {
         if (btn.getAttribute("data-tab") === tabId) {
             btn.classList.add("active");
@@ -132,7 +136,6 @@ function switchNav(tabId) {
         }
     });
 
-    // Update view panels
     document.querySelectorAll(".view-panel").forEach(panel => {
         panel.classList.remove("active");
     });
@@ -142,7 +145,6 @@ function switchNav(tabId) {
         activePanel.classList.add("active");
     }
 
-    // Update Topbar Title & Breadcrumb
     const titles = {
         "overview": { title: "Operations Dashboard", breadcrumb: "Overview" },
         "map": { title: "Live Fleet Spatial Operations", breadcrumb: "Live Fleet Map" },
@@ -156,20 +158,20 @@ function switchNav(tabId) {
         "settings": { title: "System & Campus Settings", breadcrumb: "Settings" }
     };
 
-    const info = titles[tabId] || { title: "E-RideX Portal", breadcrumb: tabId };
+    const info = titles[tabId] || { title: "E-RideX AI 2.0", breadcrumb: tabId };
     document.getElementById("topbarTitle").textContent = info.title;
     document.getElementById("topbarBreadcrumb").textContent = info.breadcrumb;
 
-    // Re-trigger layout resize for Leaflet maps if switching to map tab
     if (tabId === "overview" && dashboardMap) {
         setTimeout(() => dashboardMap.invalidateSize(), 150);
     } else if (tabId === "map" && fullMap) {
         setTimeout(() => fullMap.invalidateSize(), 150);
     }
 
-    // Close mobile sidebar if open
     const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebarBackdrop");
     if (sidebar) sidebar.classList.remove("mobile-open");
+    if (backdrop) backdrop.classList.remove("active");
 
     if (window.lucide) lucide.createIcons();
 }
@@ -181,7 +183,6 @@ function switchRole(role) {
     document.getElementById("roleBtnPassenger").classList.toggle("active", role === "passenger");
     document.getElementById("roleBtnDriver").classList.toggle("active", role === "driver");
 
-    // Hide all view panels
     document.querySelectorAll(".view-panel").forEach(panel => panel.classList.remove("active"));
 
     if (role === "admin") {
@@ -189,78 +190,125 @@ function switchRole(role) {
     } else if (role === "passenger") {
         document.getElementById("view-passenger-mode").classList.add("active");
         document.getElementById("topbarTitle").textContent = "Campus Passenger App";
-        document.getElementById("topbarBreadcrumb").textContent = "Booking Flow";
+        document.getElementById("topbarBreadcrumb").textContent = "Ride Booking";
+        if (passengerMap) {
+            setTimeout(() => passengerMap.invalidateSize(), 150);
+        }
     } else if (role === "driver") {
         document.getElementById("view-driver-mode").classList.add("active");
         document.getElementById("topbarTitle").textContent = "Driver Partner Console";
         document.getElementById("topbarBreadcrumb").textContent = "Shift Management";
         renderDriverConsole();
+        if (driverMap) {
+            setTimeout(() => driverMap.invalidateSize(), 150);
+        }
     }
 
     if (window.lucide) lucide.createIcons();
 }
 
+function toggleSidebarCollapse() {
+    const sidebar = document.getElementById("sidebar");
+    const icon = document.getElementById("collapseIcon");
+    if (sidebar) {
+        sidebar.classList.toggle("collapsed");
+        const isCollapsed = sidebar.classList.contains("collapsed");
+        if (icon) {
+            icon.setAttribute("data-lucide", isCollapsed ? "chevrons-right" : "chevrons-left");
+            if (window.lucide) lucide.createIcons();
+        }
+        setTimeout(() => {
+            if (dashboardMap) dashboardMap.invalidateSize();
+            if (fullMap) fullMap.invalidateSize();
+            if (passengerMap) passengerMap.invalidateSize();
+            if (driverMap) driverMap.invalidateSize();
+        }, 250);
+    }
+}
+
 function toggleMobileSidebar() {
     const sidebar = document.getElementById("sidebar");
+    const backdrop = document.getElementById("sidebarBackdrop");
     if (sidebar) sidebar.classList.toggle("mobile-open");
+    if (backdrop) backdrop.classList.toggle("active");
 }
 
 // ============================================================
-// 4. MAP INITIALIZATION & NON-DESTRUCTIVE UPDATES
+// 4. MAP INITIALIZATION & SMOOTH MARKER UPDATES
 // ============================================================
 
 function initMaps() {
     const center = [31.2510, 75.7050];
 
-    // 1. Dashboard Map
+    // 1. Dashboard Overview Map
     const dashElem = document.getElementById("dashboardVehicleMap");
     if (dashElem && !dashboardMap) {
         dashboardMap = L.map("dashboardVehicleMap", { zoomControl: true }).setView(center, 15);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: '&copy; OpenStreetMap contributors | E-RideX Telemetry',
+            attribution: '&copy; OpenStreetMap contributors | E-RideX',
             maxZoom: 19
         }).addTo(dashboardMap);
-
-        // Add campus hubs markers
         addCampusPOIs(dashboardMap);
     }
 
-    // 2. Full Map
+    // 2. Full Live Fleet Map
     const fullElem = document.getElementById("fullVehicleMap");
     if (fullElem && !fullMap) {
         fullMap = L.map("fullVehicleMap", { zoomControl: true }).setView(center, 15);
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: '&copy; OpenStreetMap contributors | E-RideX Telemetry',
+            attribution: '&copy; OpenStreetMap contributors | E-RideX',
             maxZoom: 19
         }).addTo(fullMap);
-
         addCampusPOIs(fullMap);
+    }
+
+    // 3. Passenger Booking Map (Section 4)
+    const passElem = document.getElementById("passengerBookingMap");
+    if (passElem && !passengerMap) {
+        passengerMap = L.map("passengerBookingMap", { zoomControl: true }).setView(center, 15);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '&copy; OpenStreetMap contributors | E-RideX Passenger',
+            maxZoom: 19
+        }).addTo(passengerMap);
+        addCampusPOIs(passengerMap);
+    }
+
+    // 4. Driver Partner Console Map (Section 5)
+    const driverElem = document.getElementById("driverConsoleMap");
+    if (driverElem && !driverMap) {
+        driverMap = L.map("driverConsoleMap", { zoomControl: true }).setView(center, 15);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '&copy; OpenStreetMap contributors | E-RideX Driver',
+            maxZoom: 19
+        }).addTo(driverMap);
+        addCampusPOIs(driverMap);
     }
 }
 
 function addCampusPOIs(mapInstance) {
-    const poiIcon = L.divIcon({
-        className: 'custom-poi-marker',
-        html: `
-            <div style="
-                background: #101828;
-                color: #FFFFFF;
-                font-size: 10px;
-                font-weight: 700;
-                padding: 2px 6px;
-                border-radius: 4px;
-                border: 1px solid #13C9B7;
-                white-space: nowrap;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-                pointer-events: none;
-            ">📍 Landmark</div>
-        `,
-        iconAnchor: [30, 20]
-    });
+    if (!mapInstance) return;
 
     for (const [name, loc] of Object.entries(CAMPUS_LOCATIONS)) {
+        const poiIcon = L.divIcon({
+            className: 'custom-poi-marker',
+            html: `
+                <div style="
+                    background: #101828;
+                    color: #FFFFFF;
+                    font-size: 10px;
+                    font-weight: 700;
+                    padding: 2px 7px;
+                    border-radius: 4px;
+                    border: 1px solid #13C9B7;
+                    white-space: nowrap;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                ">📍 ${name}</div>
+            `,
+            iconAnchor: [30, 20]
+        });
+
         L.marker([loc.lat, loc.lon], { icon: poiIcon })
-            .bindPopup(`<strong>Campus Hub: ${name}</strong><br>Designated E-Rickshaw Stand`)
+            .bindPopup(`<strong>Campus Stand: ${name}</strong><br>Designated E-Rickshaw Pickup Hub`)
             .addTo(mapInstance);
     }
 }
@@ -295,8 +343,8 @@ function updateMapMarkers(mapInstance, markerStore, vehicles) {
         const icon = L.divIcon({
             className: "custom-rickshaw-marker",
             html: customHtml,
-            iconSize: [34, 34],
-            iconAnchor: [17, 17]
+            iconSize: [32, 32],
+            iconAnchor: [16, 16]
         });
 
         const popupContent = `
@@ -308,7 +356,7 @@ function updateMapMarkers(mapInstance, markerStore, vehicles) {
                 <div style="font-size:12px; color:#667085; line-height:1.6;">
                     🔋 Battery Level: <strong>${battery}%</strong><br>
                     👥 Passenger Capacity: <strong>${vehicle.capacity || 4} Seater</strong><br>
-                    📍 GPS: <strong>${lat.toFixed(4)}, ${lon.toFixed(4)}</strong>
+                    📍 Coordinates: <strong>${lat.toFixed(4)}, ${lon.toFixed(4)}</strong>
                 </div>
                 <div style="margin-top:8px; display:flex; gap:6px;">
                     <button onclick="quickToggleVehicleStatus('${id}', '${status === 'available' ? 'maintenance' : 'available'}')"
@@ -320,19 +368,16 @@ function updateMapMarkers(mapInstance, markerStore, vehicles) {
         `;
 
         if (markerStore[id]) {
-            // Smoothly move existing marker WITHOUT closing popup
             markerStore[id].setLatLng([lat, lon]);
             markerStore[id].setIcon(icon);
             markerStore[id].setPopupContent(popupContent);
         } else {
-            // Create new marker
             const marker = L.marker([lat, lon], { icon: icon }).addTo(mapInstance);
             marker.bindPopup(popupContent);
             markerStore[id] = marker;
         }
     });
 
-    // Remove any marker that no longer exists
     const currentIds = new Set(vehicles.map(v => v.id));
     for (const [id, marker] of Object.entries(markerStore)) {
         if (!currentIds.has(id)) {
@@ -357,7 +402,7 @@ function filterMapVehicles(filterValue) {
 }
 
 // ============================================================
-// 5. CHART.JS DEMAND FORECAST
+// 5. CHART.JS DEMAND FORECAST (9 AM - 10 PM)
 // ============================================================
 
 function initForecastChart() {
@@ -365,22 +410,22 @@ function initForecastChart() {
     if (!ctx) return;
 
     const hours = ["9 AM", "10 AM", "11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM"];
-    const dummyData = [8, 12, 10, 14, 15, 11, 9, 16, 18, 17, 13, 8, 5, 4];
+    const initialData = [8, 12, 10, 14, 15, 11, 9, 16, 18, 17, 13, 8, 5, 4];
 
     forecastChartInstance = new Chart(ctx, {
         type: 'line',
         data: {
             labels: hours,
             datasets: [{
-                label: 'Projected Ride Demand',
-                data: dummyData,
-                borderColor: '#13C9B7',
-                backgroundColor: 'rgba(19, 201, 183, 0.12)',
+                label: 'Projected Demand',
+                data: initialData,
+                borderColor: '#477BFF',
+                backgroundColor: 'rgba(71, 123, 255, 0.10)',
                 borderWidth: 2.5,
                 fill: true,
                 tension: 0.35,
                 pointBackgroundColor: '#101828',
-                pointBorderColor: '#13C9B7',
+                pointBorderColor: '#477BFF',
                 pointBorderWidth: 2,
                 pointRadius: 4,
                 pointHoverRadius: 6
@@ -439,7 +484,7 @@ function updateForecastChart(forecast) {
 }
 
 // ============================================================
-// 6. DATA FETCHING & UI SYNCHRONIZATION
+// 6. DATA FETCHING & SYNCHRONIZATION
 // ============================================================
 
 async function loadAllData(silent = false) {
@@ -473,7 +518,6 @@ async function loadAllData(silent = false) {
         state.simulation = simRes || { running: false };
         if (modelRes) state.modelInfo = modelRes;
 
-        // Render UI Components
         renderKPIs(recsRes);
         renderMaps();
         renderRecentRides();
@@ -492,10 +536,6 @@ async function loadAllData(silent = false) {
 
         if (state.currentRole === "driver") {
             renderDriverConsole();
-        }
-
-        if (!silent) {
-            // subtle log or notification
         }
 
         if (window.lucide) lucide.createIcons();
@@ -525,11 +565,10 @@ function renderKPIs(recsRes) {
         .map(r => Number(r.estimated_wait_minutes));
     const avgWait = waitTimes.length > 0
         ? (waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length).toFixed(1)
-        : "1.2";
+        : "1.3";
 
-    const predDemand = recsRes?.predicted_demand ?? (state.forecastData[0]?.predicted_demand || 6);
+    const predDemand = recsRes?.predicted_demand ?? (state.forecastData[0]?.predicted_demand || 7);
 
-    // Update Elements
     safeSetText("kpiTotalVehicles", totalVehicles);
     safeSetText("kpiAvailableVehicles", available);
     safeSetText("kpiBusyVehicles", busy);
@@ -539,10 +578,10 @@ function renderKPIs(recsRes) {
     safeSetText("kpiAverageWait", `${avgWait} min`);
     safeSetText("kpiPredictedDemand", `${predDemand} rides/hr`);
 
-    // Sidebar widgets
     safeSetText("sidebarAvailBadge", available);
     safeSetText("sidebarRidesBadge", totalRides);
     safeSetText("sidebarHealthMeta", `${available} / ${totalVehicles} Available`);
+    safeSetText("passengerNearbyCountBadge", `${available} Available Nearby`);
 
     const avgBatt = totalVehicles > 0
         ? Math.round(state.vehicles.reduce((acc, v) => acc + (v.battery || 80), 0) / totalVehicles)
@@ -557,6 +596,8 @@ function renderKPIs(recsRes) {
 function renderMaps() {
     updateMapMarkers(dashboardMap, dashboardMarkers, state.vehicles);
     updateMapMarkers(fullMap, fullMapMarkers, state.vehicles);
+    updateMapMarkers(passengerMap, passengerMarkers, state.vehicles);
+    updateMapMarkers(driverMap, driverMarkers, state.vehicles);
 }
 
 function renderRecentRides() {
@@ -568,7 +609,7 @@ function renderRecentRides() {
         return;
     }
 
-    const recents = state.rides.slice(0, 5);
+    const recents = state.rides.slice(0, 6);
     tbody.innerHTML = recents.map(ride => {
         const fare = ride.fare != null ? `₹${Number(ride.fare).toFixed(1)}` : "₹25.0";
         const vehicle = ride.assigned_vehicle_id || '<span style="color:#98A2B3;">Unassigned</span>';
@@ -657,7 +698,6 @@ function renderPassengersTable() {
     const tbody = document.getElementById("passengersTableBody");
     if (!tbody) return;
 
-    // Aggregate passengers from rides
     const pMap = {};
     state.rides.forEach(r => {
         const id = r.passenger_id;
@@ -692,7 +732,7 @@ function renderAllRidesTable() {
     if (!tbody) return;
 
     if (state.rides.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#667085;">No ride requests logged in the database.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#667085;">No ride requests logged in database.</td></tr>`;
         return;
     }
 
@@ -826,7 +866,7 @@ async function toggleSimulation() {
         const data = await res.json();
         state.simulation = data.status || { running: !isRunning };
         renderSimulationStatus();
-        showToast(isRunning ? "Simulation paused." : "Simulation loop started (3s interval)", "success");
+        showToast(isRunning ? "Simulation paused." : "Simulation loop started (3s interval)", "teal");
         loadAllData(true);
     } catch (e) {
         showToast("Simulation control error: " + e.message, "danger");
@@ -1025,8 +1065,37 @@ function executeRecommendationAction(action) {
 }
 
 // ============================================================
-// 11. PASSENGER APP BOOKING EXPERIENCE (Rapido / Uber Style)
+// 11. PASSENGER APP BOOKING EXPERIENCE (Section 4 - Uber/Rapido)
 // ============================================================
+
+function updatePassengerFarePreview() {
+    const pickup = document.getElementById("passengerPickupSelect")?.value || "Main Gate";
+    const dest = document.getElementById("passengerDestSelect")?.value || "Library";
+
+    const pCoords = CAMPUS_LOCATIONS[pickup] || { lat: 31.2508, lon: 75.7051 };
+    const dCoords = CAMPUS_LOCATIONS[dest] || { lat: 31.2530, lon: 75.7070 };
+
+    // Calculate approximate Haversine distance
+    const dist = calculateHaversineDistance(pCoords.lat, pCoords.lon, dCoords.lat, dCoords.lon);
+    const fare = Math.max(20, Math.round(20.0 + (dist * 10.0)));
+    const wait = Math.max(1, Math.round((dist / 20.0) * 60 + 1));
+
+    safeSetText("passengerFareEstimate", `₹${fare}.0`);
+    safeSetText("passengerTierInfo", `~${wait} min wait • 4 Seater Electric`);
+
+    // Update active landmark chip styling
+    document.querySelectorAll(".landmark-chip").forEach(chip => {
+        chip.classList.toggle("active", chip.textContent.includes(dest));
+    });
+}
+
+function selectDestinationChip(landmark) {
+    const destSelect = document.getElementById("passengerDestSelect");
+    if (destSelect) {
+        destSelect.value = landmark;
+        updatePassengerFarePreview();
+    }
+}
 
 async function submitPassengerRideRequest() {
     const passengerId = document.getElementById("passengerIdInput").value.trim() || "STU-2026";
@@ -1069,7 +1138,6 @@ async function submitPassengerRideRequest() {
                 fare: data.fare || 25.0
             };
 
-            // Switch to Step 2 (Confirmation)
             document.getElementById("passengerBookingStep1").style.display = "none";
             document.getElementById("passengerBookingStep2").style.display = "block";
 
@@ -1111,7 +1179,6 @@ async function confirmPassengerRide() {
             request_id: data.request_id
         };
 
-        // Switch to Step 3 (Live Tracking)
         document.getElementById("passengerBookingStep2").style.display = "none";
         document.getElementById("passengerBookingStep3").style.display = "block";
 
@@ -1157,17 +1224,18 @@ function setRating(stars) {
             `<span onclick="setRating(${i})" style="color:${i <= stars ? '#F59E0B' : '#E4E7EC'};">★</span>`
         ).join("");
     }
-    showToast(`Thank you for giving ${stars} stars!`, "success");
+    showToast(`Thank you for rating ${stars} stars!`, "success");
 }
 
 // ============================================================
-// 12. DRIVER PARTNER CONSOLE
+// 12. DRIVER PARTNER CONSOLE (Section 5)
 // ============================================================
 
 function renderDriverConsole() {
     const driver = state.drivers.find(d => d.id === state.currentDriverId) || state.drivers[0];
     if (!driver) return;
 
+    safeSetText("driverHeroName", driver.name);
     safeSetText("driverVehicleId", driver.vehicle_id || "ER01");
     safeSetText("driverTodayEarnings", `₹${(driver.earnings || 3420).toLocaleString()}`);
     safeSetText("driverTotalTrips", driver.total_trips || 124);
@@ -1185,7 +1253,7 @@ function renderDriverConsole() {
         toggleBtn.textContent = isOnline ? "Switch Offline" : "Go Online";
     }
 
-    // Check if there is an active ride assigned to this vehicle
+    // Check active assigned ride for this vehicle
     const activeRide = state.rides.find(r => r.assigned_vehicle_id === driver.vehicle_id && (r.status === "assigned" || r.status === "in_progress"));
     const contentBox = document.getElementById("driverTripContent");
 
@@ -1195,14 +1263,14 @@ function renderDriverConsole() {
                 <div style="display:flex; flex-direction:column; gap:10px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <span class="badge ${activeRide.status === 'in_progress' ? 'badge-teal' : 'badge-warning'}">
-                            ${activeRide.status === 'in_progress' ? 'Trip In Progress' : 'Pickup Assigned'}
+                            ${activeRide.status === 'in_progress' ? 'Trip In Progress' : 'New Assignment'}
                         </span>
-                        <strong style="color:var(--text-primary);">₹${activeRide.fare || 25.0}</strong>
+                        <strong style="color:var(--text-primary); font-size:15px;">₹${activeRide.fare || 25.0}</strong>
                     </div>
-                    <div style="font-size:13px; line-height:1.6;">
-                        <strong>Passenger:</strong> ${activeRide.passenger_id}<br>
-                        <strong>Pickup Point:</strong> Main Gate<br>
-                        <strong>Drop Location:</strong> ${activeRide.destination}
+                    <div style="font-size:12.5px; line-height:1.6; color:var(--text-secondary);">
+                        <strong style="color:var(--text-primary);">Passenger:</strong> ${activeRide.passenger_id}<br>
+                        <strong style="color:var(--text-primary);">Pickup:</strong> Main Gate Stand<br>
+                        <strong style="color:var(--text-primary);">Drop:</strong> ${activeRide.destination}
                     </div>
                     <div style="display:flex; gap:8px; margin-top:6px;">
                         ${activeRide.status === 'assigned'
@@ -1217,8 +1285,8 @@ function renderDriverConsole() {
             `;
         } else {
             contentBox.innerHTML = `
-                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:16px;">
-                    No pending trips assigned to <strong>${driver.vehicle_id}</strong>. You are on standby.
+                <p style="font-size:12.5px; color:var(--text-secondary); text-align:center; padding:12px;">
+                    No pending trips assigned to <strong>${driver.vehicle_id}</strong>. You are on standby at designated campus stand.
                 </p>
             `;
         }
@@ -1235,6 +1303,17 @@ function toggleDriverOnlineStatus() {
 // ============================================================
 // 13. UTILITIES & CSV EXPORT
 // ============================================================
+
+function calculateHaversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371.0;
+    const dLat = (lat2 - lat1) * Math.PI / 180.0;
+    const dLon = (lon2 - lon1) * Math.PI / 180.0;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(lat1 * Math.PI / 180.0) * Math.cos(lat2 * Math.PI / 180.0) *
+              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Number((R * c).toFixed(2));
+}
 
 function exportRidesCSV() {
     if (state.rides.length === 0) {

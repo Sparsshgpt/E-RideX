@@ -712,8 +712,25 @@ def simulation_reset():
 
 frontend_path = Path(__file__).resolve().parent.parent.parent / "frontend"
 if frontend_path.exists():
+    @app.get("/style.css")
+    def get_style_css():
+        css_file = frontend_path / "style.css"
+        if css_file.exists():
+            return FileResponse(str(css_file), media_type="text/css")
+        raise HTTPException(status_code=404, detail="style.css not found")
+
+    @app.get("/app.js")
+    def get_app_js():
+        js_file = frontend_path / "app.js"
+        if js_file.exists():
+            return FileResponse(str(js_file), media_type="application/javascript")
+        raise HTTPException(status_code=404, detail="app.js not found")
+
     app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
 
     @app.get("/app")
     def serve_frontend_app():
         return FileResponse(str(frontend_path / "index.html"))
+
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend_root")
+
