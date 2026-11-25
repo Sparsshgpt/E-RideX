@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import joblib
@@ -12,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 DATA_PATH = BASE_DIR / "data" / "demand_data.csv"
 MODEL_PATH = BASE_DIR / "demand_model.pkl"
+INFO_PATH = BASE_DIR / "model_info.json"
 
 
 MODEL_INFO = {
@@ -32,6 +34,13 @@ MODEL_INFO = {
         "is_peak_hour"
     ]
 }
+
+if INFO_PATH.exists():
+    try:
+        with open(INFO_PATH, "r") as f:
+            MODEL_INFO = json.load(f)
+    except Exception:
+        pass
 
 
 def create_features(data):
@@ -124,6 +133,12 @@ def train_model():
         model,
         MODEL_PATH
     )
+
+    try:
+        with open(INFO_PATH, "w") as f:
+            json.dump(MODEL_INFO, f, indent=2)
+    except Exception:
+        pass
 
     print("Model trained successfully.")
     print(f"Dataset rows: {len(data)}")

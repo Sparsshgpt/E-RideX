@@ -1,1063 +1,1418 @@
-const API = "http://127.0.0.1:8000";
+/**
+ * E-RideX — Core Application Controller & Platform Integration
+ * Brand: E-RideX | "Smarter Rides. Greener Tomorrow."
+ */
 
-let vehicleMap = null;
-let vehicleMarkers = {};
-let pendingRide = null;
+// ============================================================
+// 1. CONFIGURATION & STATE
+// ============================================================
 
+const API_BASE = (window.location.origin && window.location.origin.startsWith("http") && !window.location.origin.includes(":5500"))
+    ? window.location.origin
+    : "http://127.0.0.1:8000";
 
-function initializeVehicleMap() {
+const CAMPUS_LOCATIONS = {
+    "Main Gate": { lat: 31.250844, lon: 75.705091 },
+    "Library": { lat: 31.253000, lon: 75.707000 },
+    "Hostel": { lat: 31.247500, lon: 75.709000 },
+    "Academic Block": { lat: 31.255000, lon: 75.703000 },
+    "Canteen": { lat: 31.249000, lon: 75.702500 }
+};
 
-    const mapElement =
-        document.getElementById("vehicleMap");
+const state = {
+    currentTab: "overview",
+    currentRole: "admin", // "admin" | "passenger" | "driver"
+    vehicles: [],
+    drivers: [],
+    rides: [],
+    routeAnalytics: [],
+    modelInfo: null,
+    recommendations: [],
+    forecastData: [],
+    simulation: {
+        running: false,
+        interval_seconds: 3.0,
+        step_count: 0
+    },
+    // Passenger booking state
+    pendingPassengerRide: null,
+    activePassengerTrip: null,
+    // Driver console state
+    currentDriverId: "DR01"
+};
 
-    if (!mapElement) {
-        return;
+let dashboardMap = null;
+let fullMap = null;
+let dashboardMarkers = {};
+let fullMapMarkers = {};
+let forecastChartInstance = null;
+let refreshTimer = null;
+
+// ============================================================
+// 2. INITIALIZATION
+// ============================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+    initClock();
+    initPopulateSelects();
+    initMaps();
+    initForecastChart();
+    loadAllData();
+
+    // Auto-refresh data every 8 seconds
+    refreshTimer = setInterval(() => {
+        loadAllData(true); // silent background update
+    }, 8000);
+
+    // Render initial Lucide icons
+    if (window.lucide) {
+        lucide.createIcons();
     }
+});
 
-    vehicleMap = L.map("vehicleMap").setView(
-        [31.250844, 75.705091],
-        15
-    );
-
-    L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-            attribution:
-                '&copy; OpenStreetMap contributors'
+function initClock() {
+    function updateClock() {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const dateStr = now.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        const clockElem = document.getElementById("liveClockText");
+        if (clockElem) {
+            clockElem.textContent = `${dateStr}, ${timeStr}`;
         }
-    ).addTo(vehicleMap);
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
 }
 
+function initPopulateSelects() {
+    // Populate dispatch hour select (8 to 22)
+    const dispatchSelect = document.getElementById("dispatchHourSelect");
+    const predHourSelect = document.getElementById("predHourSelect");
+    const currentHour = new Date().getHours();
 
-function updateVehicleMap(vehicles) {
-
-    if (!vehicleMap) {
-        return;
+    for (let h = 0; h < 24; h++) {
+        const label = `${h.toString().padStart(2, '0')}:00 ${h >= 12 ? 'PM' : 'AM'}`;
+        if (dispatchSelect && h >= 7 && h <= 22) {
+            const opt = document.createElement("option");
+            opt.value = h;
+            opt.textContent = label;
+            if (h === currentHour) opt.selected = true;
+            dispatchSelect.appendChild(opt);
+        }
+        if (predHourSelect) {
+            const opt = document.createElement("option");
+            opt.value = h;
+            opt.textContent = label;
+            if (h === currentHour) opt.selected = true;
+            predHourSelect.appendChild(opt);
+        }
     }
 
-    Object.values(vehicleMarkers).forEach(
-        marker => marker.remove()
-    );
+    // Set day select
+    const daySelect = document.getElementById("predDaySelect");
+    if (daySelect) {
+        const todayWeekday = (new Date().getDay() + 6) % 7; // Monday = 0
+        daySelect.value = todayWeekday;
+    }
+}
 
-    vehicleMarkers = {};
+// ============================================================
+// 3. NAVIGATION & ROLE SWITCHER
+// ============================================================
 
-    vehicles.forEach(vehicle => {
+function switchNav(tabId) {
+    state.currentTab = tabId;
 
-        let markerColor = "green";
-
-        if (vehicle.status === "busy") {
-            markerColor = "red";
+    // Update sidebar link active class
+    document.querySelectorAll(".nav-link").forEach(btn => {
+        if (btn.getAttribute("data-tab") === tabId) {
+            btn.classList.add("active");
+        } else {
+            btn.classList.remove("active");
         }
-
-        if (vehicle.status === "maintenance") {
-            markerColor = "orange";
-        }
-
-        const icon =
-            L.divIcon({
-                className: "vehicle-marker",
-                html: `
-                    <div style="
-                        width: 18px;
-                        height: 18px;
-                        background: ${markerColor};
-                        border: 3px solid white;
-                        border-radius: 50%;
-                        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
-                    "></div>
-                `,
-                iconSize: [24, 24],
-                iconAnchor: [12, 12]
-            });
-
-        const marker =
-            L.marker(
-                [
-                    vehicle.latitude,
-                    vehicle.longitude
-                ],
-                {
-                    icon: icon
-                }
-            ).addTo(vehicleMap);
-
-        marker.bindPopup(`
-            <div>
-                <strong>${vehicle.id}</strong>
-                <br>
-                Status: ${vehicle.status}
-                <br>
-                Battery: ${vehicle.battery}%
-                <br>
-                Capacity: ${vehicle.capacity}
-            </div>
-        `);
-
-        vehicleMarkers[vehicle.id] = marker;
-
     });
-}
 
-
-function updateVehicleStats(vehicles) {
-
-    const total =
-        vehicles.length;
-
-    const available =
-        vehicles.filter(
-            vehicle =>
-                vehicle.status === "available"
-        ).length;
-
-    const busy =
-        vehicles.filter(
-            vehicle =>
-                vehicle.status === "busy"
-        ).length;
-
-    document.getElementById(
-        "totalVehicles"
-    ).textContent = total;
-
-    document.getElementById(
-        "availableVehicles"
-    ).textContent = available;
-
-    document.getElementById(
-        "busyVehicles"
-    ).textContent = busy;
-}
-
-
-function updateVehicleStatusList(vehicles) {
-
-    const container =
-        document.getElementById(
-            "vehicleStatusList"
-        );
-
-    if (!container) {
-        return;
-    }
-
-    container.innerHTML = "";
-
-    vehicles.forEach(vehicle => {
-
-        const card =
-            document.createElement("div");
-
-        card.className =
-            "vehicle-status-card";
-
-        card.innerHTML = `
-
-            <div class="vehicle-status-info">
-
-                <strong>
-                    ${vehicle.id}
-                </strong>
-
-                <p>
-                    Battery:
-                    ${vehicle.battery}%
-                </p>
-
-                <p>
-                    Capacity:
-                    ${vehicle.capacity}
-                </p>
-
-                <p>
-                    Current Status:
-                    ${vehicle.status}
-                </p>
-
-            </div>
-
-            <div class="vehicle-status-control">
-
-                <select
-                    onchange="changeVehicleStatus(
-                        '${vehicle.id}',
-                        this.value
-                    )"
-                >
-
-                    <option
-                        value="available"
-                        ${
-                            vehicle.status === "available"
-                                ? "selected"
-                                : ""
-                        }
-                    >
-                        Available
-                    </option>
-
-                    <option
-                        value="busy"
-                        ${
-                            vehicle.status === "busy"
-                                ? "selected"
-                                : ""
-                        }
-                    >
-                        Busy
-                    </option>
-
-                    <option
-                        value="maintenance"
-                        ${
-                            vehicle.status === "maintenance"
-                                ? "selected"
-                                : ""
-                        }
-                    >
-                        Maintenance
-                    </option>
-
-                </select>
-
-            </div>
-
-        `;
-
-        container.appendChild(card);
-
+    // Update view panels
+    document.querySelectorAll(".view-panel").forEach(panel => {
+        panel.classList.remove("active");
     });
-}
 
-
-async function changeVehicleStatus(
-    vehicleId,
-    status
-) {
-
-    try {
-
-        const response =
-            await fetch(
-                `${API}/vehicles/${vehicleId}/status?status=${status}`,
-                {
-                    method: "PUT"
-                }
-            );
-
-        if (!response.ok) {
-
-            const error =
-                await response.json();
-
-            throw new Error(
-                error.detail ||
-                "Failed to update vehicle status"
-            );
-        }
-
-        await loadDashboard();
-
-    } catch (error) {
-
-        console.error(
-            "Vehicle status update error:",
-            error
-        );
-
-        alert(
-            `Failed to update ${vehicleId}: ${error.message}`
-        );
-    }
-}
-
-
-function updateRequestStats(requests) {
-
-    const totalRequests =
-        requests.length;
-
-    const unanswered =
-        requests.filter(
-            request =>
-                request.status === "unanswered"
-        ).length;
-
-    const assigned =
-        requests.filter(
-            request =>
-                request.status === "assigned"
-        ).length;
-
-    const waitTimes =
-        requests
-            .filter(
-                request =>
-                    request.estimated_wait_minutes !== null &&
-                    request.estimated_wait_minutes !== undefined
-            )
-            .map(
-                request =>
-                    Number(
-                        request.estimated_wait_minutes
-                    )
-            );
-
-    let averageWait = 0;
-
-    if (waitTimes.length > 0) {
-
-        const totalWait =
-            waitTimes.reduce(
-                (sum, value) =>
-                    sum + value,
-                0
-            );
-
-        averageWait =
-            totalWait /
-            waitTimes.length;
+    const activePanel = document.getElementById(`view-${tabId}`);
+    if (activePanel) {
+        activePanel.classList.add("active");
     }
 
-    document.getElementById(
-        "totalRequests"
-    ).textContent =
-        totalRequests;
-
-    document.getElementById(
-        "unansweredRequests"
-    ).textContent =
-        unanswered;
-
-    document.getElementById(
-        "averageWait"
-    ).textContent =
-        averageWait.toFixed(1);
-
-    return {
-        totalRequests,
-        unanswered,
-        assigned,
-        averageWait
-    };
-}
-
-
-function updatePredictedDemand(demand) {
-
-    const element =
-        document.getElementById(
-            "predictedDemand"
-        );
-
-    if (!element) {
-        return;
-    }
-
-    element.textContent =
-        demand;
-}
-
-
-function updateModelInfo(model) {
-
-    if (!model) {
-        return;
-    }
-
-    const algorithm =
-        document.getElementById(
-            "modelAlgorithm"
-        );
-
-    const dataset =
-        document.getElementById(
-            "modelDataset"
-        );
-
-    const training =
-        document.getElementById(
-            "modelTraining"
-        );
-
-    const testing =
-        document.getElementById(
-            "modelTesting"
-        );
-
-    const mae =
-        document.getElementById(
-            "modelMAE"
-        );
-
-    const r2 =
-        document.getElementById(
-            "modelR2"
-        );
-
-    if (algorithm) {
-        algorithm.textContent =
-            model.algorithm || "-";
-    }
-
-    if (dataset) {
-        dataset.textContent =
-            model.dataset_rows || "-";
-    }
-
-    if (training) {
-        training.textContent =
-            model.training_rows || "-";
-    }
-
-    if (testing) {
-        testing.textContent =
-            model.testing_rows || "-";
-    }
-
-    if (mae) {
-        mae.textContent =
-            model.mae ?? "-";
-    }
-
-    if (r2) {
-        r2.textContent =
-            model.r2_score ?? "-";
-    }
-}
-
-
-function updateRouteAnalytics(routes) {
-
-    const container =
-        document.getElementById(
-            "routeAnalytics"
-        );
-
-    if (!container) {
-        return;
-    }
-
-    if (!routes || routes.length === 0) {
-
-        container.innerHTML = `
-            <p>
-                No route analytics available yet.
-            </p>
-        `;
-
-        return;
-    }
-
-    container.innerHTML = "";
-
-    routes.forEach(route => {
-
-        const card =
-            document.createElement("div");
-
-        card.className =
-            "route-card";
-
-        card.innerHTML = `
-
-            <div>
-
-                <strong>
-                    ${route.route}
-                </strong>
-
-                <p>
-                    Requests:
-                    ${route.total_requests}
-                </p>
-
-                <p>
-                    Assigned:
-                    ${route.assigned_requests}
-                </p>
-
-                <p>
-                    Unanswered:
-                    ${route.unanswered_requests}
-                </p>
-
-            </div>
-
-            <div>
-
-                <p>
-                    Service Rate:
-                    ${route.service_rate_percent}%
-                </p>
-
-                <p>
-                    Average Wait:
-                    ${route.average_wait_minutes} min
-                </p>
-
-                <strong>
-                    ${route.service_level}
-                </strong>
-
-            </div>
-
-        `;
-
-        container.appendChild(card);
-
-    });
-}
-
-
-async function submitRideRequest() {
-
-    const passengerId =
-        document.getElementById(
-            "passengerId"
-        ).value.trim();
-
-    const pickupLocation =
-        document.getElementById(
-            "pickupLocation"
-        ).value;
-
-    const destination =
-        document.getElementById(
-            "destination"
-        ).value;
-
-    const resultElement =
-        document.getElementById(
-            "rideResult"
-        );
-
-    if (
-        !passengerId ||
-        !pickupLocation ||
-        !destination
-    ) {
-
-        resultElement.innerHTML = `
-            <p>
-                Please fill all fields.
-            </p>
-        `;
-
-        return;
-    }
-
-
-    const locations = {
-
-        "Main Gate": {
-            latitude: 31.250844,
-            longitude: 75.705091
-        },
-
-        "Library": {
-            latitude: 31.253000,
-            longitude: 75.707000
-        },
-
-        "Hostel": {
-            latitude: 31.247500,
-            longitude: 75.709000
-        },
-
-        "Academic Block": {
-            latitude: 31.255000,
-            longitude: 75.703000
-        },
-
-        "Canteen": {
-            latitude: 31.249000,
-            longitude: 75.702500
-        }
-
+    // Update Topbar Title & Breadcrumb
+    const titles = {
+        "overview": { title: "Operations Dashboard", breadcrumb: "Overview" },
+        "map": { title: "Live Fleet Spatial Operations", breadcrumb: "Live Fleet Map" },
+        "ai-demand": { title: "AI Demand Intelligence", breadcrumb: "Demand Forecast" },
+        "vehicles": { title: "Fleet Management & Telemetry", breadcrumb: "Vehicles" },
+        "drivers": { title: "Driver Partner Network", breadcrumb: "Drivers" },
+        "passengers": { title: "Campus Passenger Directory", breadcrumb: "Passengers" },
+        "rides": { title: "Campus Ride Operations", breadcrumb: "Rides" },
+        "analytics": { title: "Route Analytics & Service Gaps", breadcrumb: "Route Analytics" },
+        "reports": { title: "Fleet Utilization Reports", breadcrumb: "Reports" },
+        "settings": { title: "System & Campus Settings", breadcrumb: "Settings" }
     };
 
+    const info = titles[tabId] || { title: "E-RideX Portal", breadcrumb: tabId };
+    document.getElementById("topbarTitle").textContent = info.title;
+    document.getElementById("topbarBreadcrumb").textContent = info.breadcrumb;
 
-    const pickup =
-        locations[pickupLocation];
-
-
-    if (!pickup) {
-
-        resultElement.innerHTML = `
-            <p>
-                Invalid pickup location.
-            </p>
-        `;
-
-        return;
+    // Re-trigger layout resize for Leaflet maps if switching to map tab
+    if (tabId === "overview" && dashboardMap) {
+        setTimeout(() => dashboardMap.invalidateSize(), 150);
+    } else if (tabId === "map" && fullMap) {
+        setTimeout(() => fullMap.invalidateSize(), 150);
     }
 
+    // Close mobile sidebar if open
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) sidebar.classList.remove("mobile-open");
 
-    try {
+    if (window.lucide) lucide.createIcons();
+}
 
-        resultElement.innerHTML = `
-            <p>
-                Searching for nearby driver...
-            </p>
+function switchRole(role) {
+    state.currentRole = role;
+
+    document.getElementById("roleBtnAdmin").classList.toggle("active", role === "admin");
+    document.getElementById("roleBtnPassenger").classList.toggle("active", role === "passenger");
+    document.getElementById("roleBtnDriver").classList.toggle("active", role === "driver");
+
+    // Hide all view panels
+    document.querySelectorAll(".view-panel").forEach(panel => panel.classList.remove("active"));
+
+    if (role === "admin") {
+        switchNav(state.currentTab || "overview");
+    } else if (role === "passenger") {
+        document.getElementById("view-passenger-mode").classList.add("active");
+        document.getElementById("topbarTitle").textContent = "Campus Passenger App";
+        document.getElementById("topbarBreadcrumb").textContent = "Booking Flow";
+    } else if (role === "driver") {
+        document.getElementById("view-driver-mode").classList.add("active");
+        document.getElementById("topbarTitle").textContent = "Driver Partner Console";
+        document.getElementById("topbarBreadcrumb").textContent = "Shift Management";
+        renderDriverConsole();
+    }
+
+    if (window.lucide) lucide.createIcons();
+}
+
+function toggleMobileSidebar() {
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) sidebar.classList.toggle("mobile-open");
+}
+
+// ============================================================
+// 4. MAP INITIALIZATION & NON-DESTRUCTIVE UPDATES
+// ============================================================
+
+function initMaps() {
+    const center = [31.2510, 75.7050];
+
+    // 1. Dashboard Map
+    const dashElem = document.getElementById("dashboardVehicleMap");
+    if (dashElem && !dashboardMap) {
+        dashboardMap = L.map("dashboardVehicleMap", { zoomControl: true }).setView(center, 15);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '&copy; OpenStreetMap contributors | E-RideX Telemetry',
+            maxZoom: 19
+        }).addTo(dashboardMap);
+
+        // Add campus hubs markers
+        addCampusPOIs(dashboardMap);
+    }
+
+    // 2. Full Map
+    const fullElem = document.getElementById("fullVehicleMap");
+    if (fullElem && !fullMap) {
+        fullMap = L.map("fullVehicleMap", { zoomControl: true }).setView(center, 15);
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: '&copy; OpenStreetMap contributors | E-RideX Telemetry',
+            maxZoom: 19
+        }).addTo(fullMap);
+
+        addCampusPOIs(fullMap);
+    }
+}
+
+function addCampusPOIs(mapInstance) {
+    const poiIcon = L.divIcon({
+        className: 'custom-poi-marker',
+        html: `
+            <div style="
+                background: #101828;
+                color: #FFFFFF;
+                font-size: 10px;
+                font-weight: 700;
+                padding: 2px 6px;
+                border-radius: 4px;
+                border: 1px solid #13C9B7;
+                white-space: nowrap;
+                box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                pointer-events: none;
+            ">📍 Landmark</div>
+        `,
+        iconAnchor: [30, 20]
+    });
+
+    for (const [name, loc] of Object.entries(CAMPUS_LOCATIONS)) {
+        L.marker([loc.lat, loc.lon], { icon: poiIcon })
+            .bindPopup(`<strong>Campus Hub: ${name}</strong><br>Designated E-Rickshaw Stand`)
+            .addTo(mapInstance);
+    }
+}
+
+function updateMapMarkers(mapInstance, markerStore, vehicles) {
+    if (!mapInstance) return;
+
+    vehicles.forEach(vehicle => {
+        const id = vehicle.id;
+        const status = vehicle.status || "available";
+        const battery = vehicle.battery ?? 80;
+        const lat = vehicle.latitude;
+        const lon = vehicle.longitude;
+
+        let statusClass = "marker-avail";
+        let statusBadge = "badge-success";
+        if (status === "busy") {
+            statusClass = "marker-busy";
+            statusBadge = "badge-danger";
+        } else if (status === "maintenance") {
+            statusClass = "marker-maint";
+            statusBadge = "badge-warning";
+        }
+
+        const customHtml = `
+            <div class="marker-pin ${statusClass}" title="${id} • ${status}">
+                <span>🛺</span>
+                <span class="marker-battery-pill">${battery}%</span>
+            </div>
         `;
 
+        const icon = L.divIcon({
+            className: "custom-rickshaw-marker",
+            html: customHtml,
+            iconSize: [34, 34],
+            iconAnchor: [17, 17]
+        });
 
-        const response =
-            await fetch(
-                `${API}/ride-request`,
-                {
-                    method: "POST",
+        const popupContent = `
+            <div style="font-family:'Inter',sans-serif; min-width:180px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                    <strong style="font-size:14px; color:#101828;">${id}</strong>
+                    <span class="badge ${statusBadge}">${status}</span>
+                </div>
+                <div style="font-size:12px; color:#667085; line-height:1.6;">
+                    🔋 Battery Level: <strong>${battery}%</strong><br>
+                    👥 Passenger Capacity: <strong>${vehicle.capacity || 4} Seater</strong><br>
+                    📍 GPS: <strong>${lat.toFixed(4)}, ${lon.toFixed(4)}</strong>
+                </div>
+                <div style="margin-top:8px; display:flex; gap:6px;">
+                    <button onclick="quickToggleVehicleStatus('${id}', '${status === 'available' ? 'maintenance' : 'available'}')"
+                            style="flex:1; background:#101828; color:#fff; border:none; padding:4px 8px; font-size:10px; border-radius:4px; cursor:pointer;">
+                        Toggle Status
+                    </button>
+                </div>
+            </div>
+        `;
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
+        if (markerStore[id]) {
+            // Smoothly move existing marker WITHOUT closing popup
+            markerStore[id].setLatLng([lat, lon]);
+            markerStore[id].setIcon(icon);
+            markerStore[id].setPopupContent(popupContent);
+        } else {
+            // Create new marker
+            const marker = L.marker([lat, lon], { icon: icon }).addTo(mapInstance);
+            marker.bindPopup(popupContent);
+            markerStore[id] = marker;
+        }
+    });
+
+    // Remove any marker that no longer exists
+    const currentIds = new Set(vehicles.map(v => v.id));
+    for (const [id, marker] of Object.entries(markerStore)) {
+        if (!currentIds.has(id)) {
+            marker.remove();
+            delete markerStore[id];
+        }
+    }
+}
+
+function recenterMap(mapInstance) {
+    if (mapInstance) {
+        mapInstance.setView([31.2510, 75.7050], 15, { animate: true });
+    }
+}
+
+function filterMapVehicles(filterValue) {
+    let filtered = state.vehicles;
+    if (filterValue !== "all") {
+        filtered = state.vehicles.filter(v => v.status === filterValue);
+    }
+    updateMapMarkers(fullMap, fullMapMarkers, filtered);
+}
+
+// ============================================================
+// 5. CHART.JS DEMAND FORECAST
+// ============================================================
+
+function initForecastChart() {
+    const ctx = document.getElementById("demandForecastChart");
+    if (!ctx) return;
+
+    const hours = ["9 AM", "10 AM", "11 AM", "12 PM", "1 PM", "2 PM", "3 PM", "4 PM", "5 PM", "6 PM", "7 PM", "8 PM", "9 PM", "10 PM"];
+    const dummyData = [8, 12, 10, 14, 15, 11, 9, 16, 18, 17, 13, 8, 5, 4];
+
+    forecastChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: hours,
+            datasets: [{
+                label: 'Projected Ride Demand',
+                data: dummyData,
+                borderColor: '#13C9B7',
+                backgroundColor: 'rgba(19, 201, 183, 0.12)',
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.35,
+                pointBackgroundColor: '#101828',
+                pointBorderColor: '#13C9B7',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#101828',
+                    titleColor: '#FFFFFF',
+                    bodyColor: '#13C9B7',
+                    padding: 10,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: (ctx) => `Demand: ${ctx.parsed.y} e-rickshaws needed`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#667085', font: { size: 11, family: 'Inter' } }
+                },
+                y: {
+                    grid: { color: '#E4E7EC' },
+                    ticks: {
+                        color: '#667085',
+                        font: { size: 11, family: 'Inter' },
+                        stepSize: 4
                     },
-
-                    body: JSON.stringify({
-
-                        passenger_id:
-                            passengerId,
-
-                        pickup_latitude:
-                            pickup.latitude,
-
-                        pickup_longitude:
-                            pickup.longitude,
-
-                        destination:
-                            destination
-
-                    })
+                    beginAtZero: true
                 }
-            );
+            }
+        }
+    });
+}
 
+function updateForecastChart(forecast) {
+    if (!forecastChartInstance || !forecast || forecast.length === 0) return;
 
-        const data =
-            await response.json();
+    const labels = forecast.map(item => {
+        const h = item.hour;
+        const suffix = h >= 12 ? 'PM' : 'AM';
+        const displayH = h % 12 === 0 ? 12 : h % 12;
+        return `${displayH} ${suffix}`;
+    });
 
+    const values = forecast.map(item => item.predicted_demand);
 
-        if (!response.ok) {
+    forecastChartInstance.data.labels = labels;
+    forecastChartInstance.data.datasets[0].data = values;
+    forecastChartInstance.update();
+}
 
-            throw new Error(
-                data.detail ||
-                "Ride request failed"
-            );
+// ============================================================
+// 6. DATA FETCHING & UI SYNCHRONIZATION
+// ============================================================
+
+async function loadAllData(silent = false) {
+    try {
+        const [
+            vehiclesRes,
+            ridesRes,
+            routesRes,
+            forecastRes,
+            recsRes,
+            driversRes,
+            simRes,
+            modelRes
+        ] = await Promise.all([
+            fetch(`${API_BASE}/vehicles`).then(r => r.json()).catch(() => ({ vehicles: [] })),
+            fetch(`${API_BASE}/ride-requests`).then(r => r.json()).catch(() => ({ requests: [] })),
+            fetch(`${API_BASE}/analytics/routes`).then(r => r.json()).catch(() => ({ routes: [] })),
+            fetch(`${API_BASE}/demand-forecast`).then(r => r.json()).catch(() => ({ forecast: [] })),
+            fetch(`${API_BASE}/ai/recommendations`).then(r => r.json()).catch(() => ({ recommendations: [] })),
+            fetch(`${API_BASE}/drivers`).then(r => r.json()).catch(() => ({ drivers: [] })),
+            fetch(`${API_BASE}/simulation/status`).then(r => r.json()).catch(() => ({ running: false })),
+            fetch(`${API_BASE}/model-info`).then(r => r.json()).catch(() => null)
+        ]);
+
+        state.vehicles = vehiclesRes.vehicles || [];
+        state.rides = ridesRes.requests || [];
+        state.routeAnalytics = routesRes.routes || [];
+        state.forecastData = forecastRes.forecast || [];
+        state.recommendations = recsRes.recommendations || [];
+        state.drivers = driversRes.drivers || [];
+        state.simulation = simRes || { running: false };
+        if (modelRes) state.modelInfo = modelRes;
+
+        // Render UI Components
+        renderKPIs(recsRes);
+        renderMaps();
+        renderRecentRides();
+        renderVehiclesTable();
+        renderDriversTable();
+        renderPassengersTable();
+        renderAllRidesTable();
+        renderAIRecommendations();
+        renderRouteAnalytics();
+        renderModelMetadata();
+        renderSimulationStatus();
+
+        if (state.forecastData.length > 0) {
+            updateForecastChart(state.forecastData);
         }
 
+        if (state.currentRole === "driver") {
+            renderDriverConsole();
+        }
 
-        if (
-            data.status ===
-            "driver_found"
-        ) {
+        if (!silent) {
+            // subtle log or notification
+        }
 
-            pendingRide = {
+        if (window.lucide) lucide.createIcons();
+    } catch (err) {
+        console.error("[E-RideX] Error loading platform data:", err);
+        if (!silent) {
+            showToast("Failed to fetch live platform data from API", "danger");
+        }
+    }
+}
 
-                passenger_id:
-                    passengerId,
+// ============================================================
+// 7. RENDER FUNCTIONS
+// ============================================================
 
-                pickup_latitude:
-                    pickup.latitude,
+function renderKPIs(recsRes) {
+    const totalVehicles = state.vehicles.length;
+    const available = state.vehicles.filter(v => v.status === "available").length;
+    const busy = state.vehicles.filter(v => v.status === "busy").length;
+    const maint = state.vehicles.filter(v => v.status === "maintenance").length;
 
-                pickup_longitude:
-                    pickup.longitude,
+    const totalRides = state.rides.length;
+    const unanswered = state.rides.filter(r => r.status === "unanswered").length;
 
-                destination:
-                    destination,
+    const waitTimes = state.rides
+        .filter(r => r.estimated_wait_minutes != null)
+        .map(r => Number(r.estimated_wait_minutes));
+    const avgWait = waitTimes.length > 0
+        ? (waitTimes.reduce((a, b) => a + b, 0) / waitTimes.length).toFixed(1)
+        : "1.2";
 
-                vehicle_id:
-                    data.driver.id,
+    const predDemand = recsRes?.predicted_demand ?? (state.forecastData[0]?.predicted_demand || 6);
 
-                search_radius_km:
-                    data.search_radius_km,
+    // Update Elements
+    safeSetText("kpiTotalVehicles", totalVehicles);
+    safeSetText("kpiAvailableVehicles", available);
+    safeSetText("kpiBusyVehicles", busy);
+    safeSetText("kpiMaintVehicles", maint);
+    safeSetText("kpiTotalRequests", totalRides);
+    safeSetText("kpiUnansweredRequests", unanswered);
+    safeSetText("kpiAverageWait", `${avgWait} min`);
+    safeSetText("kpiPredictedDemand", `${predDemand} rides/hr`);
 
-                estimated_wait_minutes:
-                    data.driver.estimated_wait_minutes
+    // Sidebar widgets
+    safeSetText("sidebarAvailBadge", available);
+    safeSetText("sidebarRidesBadge", totalRides);
+    safeSetText("sidebarHealthMeta", `${available} / ${totalVehicles} Available`);
 
+    const avgBatt = totalVehicles > 0
+        ? Math.round(state.vehicles.reduce((acc, v) => acc + (v.battery || 80), 0) / totalVehicles)
+        : 80;
+    safeSetText("sidebarBatteryMeta", `Avg ${avgBatt}% Batt`);
+
+    const progressPercent = totalVehicles > 0 ? (available / totalVehicles) * 100 : 0;
+    const progressFill = document.getElementById("sidebarProgressFill");
+    if (progressFill) progressFill.style.width = `${progressPercent}%`;
+}
+
+function renderMaps() {
+    updateMapMarkers(dashboardMap, dashboardMarkers, state.vehicles);
+    updateMapMarkers(fullMap, fullMapMarkers, state.vehicles);
+}
+
+function renderRecentRides() {
+    const tbody = document.getElementById("recentRidesTableBody");
+    if (!tbody) return;
+
+    if (state.rides.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#667085;">No campus rides recorded yet.</td></tr>`;
+        return;
+    }
+
+    const recents = state.rides.slice(0, 5);
+    tbody.innerHTML = recents.map(ride => {
+        const fare = ride.fare != null ? `₹${Number(ride.fare).toFixed(1)}` : "₹25.0";
+        const vehicle = ride.assigned_vehicle_id || '<span style="color:#98A2B3;">Unassigned</span>';
+        const badge = getStatusBadge(ride.status);
+
+        return `
+            <tr>
+                <td><strong>#REQ-${ride.id}</strong></td>
+                <td>${ride.passenger_id}</td>
+                <td>Main Gate → ${ride.destination}</td>
+                <td><strong>${vehicle}</strong></td>
+                <td>${fare}</td>
+                <td>${badge}</td>
+            </tr>
+        `;
+    }).join("");
+}
+
+function renderVehiclesTable() {
+    const tbody = document.getElementById("vehiclesTableBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = state.vehicles.map(v => {
+        const batt = v.battery ?? 80;
+        let battColor = "batt-high";
+        if (batt < 30) battColor = "batt-low";
+        else if (batt < 70) battColor = "batt-mid";
+
+        const driver = state.drivers.find(d => d.vehicle_id === v.id);
+        const driverName = driver ? `${driver.name} (${driver.id})` : '<span style="color:#98A2B3;">Unassigned</span>';
+
+        return `
+            <tr>
+                <td><strong>${v.id}</strong></td>
+                <td>${getStatusBadge(v.status)}</td>
+                <td>
+                    <div class="battery-wrapper">
+                        <div class="battery-bar"><div class="battery-fill ${battColor}" style="width:${batt}%;"></div></div>
+                        <span style="font-weight:600; font-size:12px;">${batt}%</span>
+                    </div>
+                </td>
+                <td>${v.capacity || 4} Seater</td>
+                <td><code style="font-size:11.5px; color:#477BFF;">${v.latitude.toFixed(4)}, ${v.longitude.toFixed(4)}</code></td>
+                <td>${driverName}</td>
+                <td>
+                    <select class="form-select" style="width:130px; height:32px; font-size:12px;"
+                            onchange="quickToggleVehicleStatus('${v.id}', this.value)">
+                        <option value="available" ${v.status === 'available' ? 'selected' : ''}>Available</option>
+                        <option value="busy" ${v.status === 'busy' ? 'selected' : ''}>Busy</option>
+                        <option value="maintenance" ${v.status === 'maintenance' ? 'selected' : ''}>Maintenance</option>
+                    </select>
+                </td>
+            </tr>
+        `;
+    }).join("");
+}
+
+function renderDriversTable() {
+    const tbody = document.getElementById("driversTableBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = state.drivers.map(d => {
+        const isOnline = d.status === "online";
+        return `
+            <tr>
+                <td><strong>${d.id}</strong></td>
+                <td>${d.name}</td>
+                <td>${d.phone}</td>
+                <td><strong>${d.vehicle_id || 'N/A'}</strong></td>
+                <td>${getStatusBadge(d.status)}</td>
+                <td><span style="color:#F59E0B; font-weight:700;">★ ${d.rating || 4.8}</span></td>
+                <td>${d.total_trips || 0}</td>
+                <td><strong>₹${(d.earnings || 0).toLocaleString()}</strong></td>
+                <td>
+                    <button class="btn ${isOnline ? 'btn-outline' : 'btn-primary'} btn-sm"
+                            onclick="toggleDriverStatus('${d.id}', '${isOnline ? 'offline' : 'online'}')">
+                        ${isOnline ? 'Go Offline' : 'Go Online'}
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join("");
+}
+
+function renderPassengersTable() {
+    const tbody = document.getElementById("passengersTableBody");
+    if (!tbody) return;
+
+    // Aggregate passengers from rides
+    const pMap = {};
+    state.rides.forEach(r => {
+        const id = r.passenger_id;
+        if (!pMap[id]) {
+            pMap[id] = { id, total: 0, completed: 0, unanswered: 0, lastDest: r.destination, lastActive: r.created_at || 'Recent' };
+        }
+        pMap[id].total++;
+        if (r.status === 'completed' || r.status === 'assigned') pMap[id].completed++;
+        if (r.status === 'unanswered') pMap[id].unanswered++;
+    });
+
+    const pList = Object.values(pMap);
+    if (pList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#667085;">No passenger history recorded yet.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = pList.map(p => `
+        <tr>
+            <td><strong>${p.id}</strong></td>
+            <td>${p.total}</td>
+            <td><span class="badge badge-success">${p.completed} Completed</span></td>
+            <td><span class="badge badge-danger">${p.unanswered} Unanswered</span></td>
+            <td>${p.lastDest}</td>
+            <td><span style="font-size:11.5px; color:#667085;">${p.lastActive}</span></td>
+        </tr>
+    `).join("");
+}
+
+function renderAllRidesTable() {
+    const tbody = document.getElementById("allRidesTableBody");
+    if (!tbody) return;
+
+    if (state.rides.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#667085;">No ride requests logged in the database.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = state.rides.map(r => {
+        const fare = r.fare != null ? `₹${Number(r.fare).toFixed(1)}` : "₹25.0";
+        const wait = r.estimated_wait_minutes != null ? `${r.estimated_wait_minutes} min` : "—";
+        const vehicle = r.assigned_vehicle_id ? `<strong>${r.assigned_vehicle_id}</strong>` : '<span style="color:#98A2B3;">None</span>';
+
+        let actionBtns = "";
+        if (r.status === "assigned") {
+            actionBtns = `
+                <button class="btn btn-navy btn-sm" onclick="startRideAction(${r.id})">Start</button>
+                <button class="btn btn-primary btn-sm" onclick="completeRideAction(${r.id})">Complete</button>
+            `;
+        } else if (r.status === "in_progress") {
+            actionBtns = `
+                <button class="btn btn-primary btn-sm" onclick="completeRideAction(${r.id})">Complete Drop</button>
+            `;
+        } else {
+            actionBtns = `<span style="font-size:11px; color:#98A2B3;">Closed</span>`;
+        }
+
+        return `
+            <tr>
+                <td><strong>#REQ-${r.id}</strong></td>
+                <td>${r.passenger_id}</td>
+                <td>Main Gate</td>
+                <td>${r.destination}</td>
+                <td>${vehicle}</td>
+                <td>${wait}</td>
+                <td><strong>${fare}</strong></td>
+                <td>${getStatusBadge(r.status)}</td>
+                <td><div style="display:flex; gap:6px;">${actionBtns}</div></td>
+            </tr>
+        `;
+    }).join("");
+}
+
+function renderAIRecommendations() {
+    const container = document.getElementById("aiRecList");
+    if (!container) return;
+
+    if (state.recommendations.length === 0) {
+        container.innerHTML = `
+            <div class="rec-item">
+                <span class="rec-name">All campus routes currently operating within optimal parameters.</span>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = state.recommendations.map(rec => `
+        <div class="rec-item">
+            <div class="rec-top">
+                <span class="rec-tag ${rec.priority || 'normal'}">${rec.badge || 'Advisory'}</span>
+            </div>
+            <div class="rec-name">${rec.title}</div>
+            <div class="rec-desc">${rec.description}</div>
+            <button class="rec-action-btn" onclick="executeRecommendationAction('${rec.action}')">${rec.action}</button>
+        </div>
+    `).join("");
+}
+
+function renderRouteAnalytics() {
+    const tbody = document.getElementById("routeAnalyticsTableBody");
+    if (!tbody) return;
+
+    if (state.routeAnalytics.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:#667085;">No route analytics recorded yet.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = state.routeAnalytics.map(route => {
+        let levelBadge = "badge-success";
+        if (route.service_level === "poor") levelBadge = "badge-danger";
+        else if (route.service_level === "moderate") levelBadge = "badge-warning";
+
+        return `
+            <tr>
+                <td><strong>${route.route}</strong></td>
+                <td>${route.total_requests}</td>
+                <td>${route.assigned_requests}</td>
+                <td>${route.unanswered_requests}</td>
+                <td>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div style="flex:1; height:6px; background:#E4E7EC; border-radius:99px; overflow:hidden;">
+                            <div style="width:${route.service_rate_percent}%; height:100%; background:${route.service_rate_percent < 50 ? '#EF4444' : '#22C55E'};"></div>
+                        </div>
+                        <span style="font-weight:600; font-size:12px;">${route.service_rate_percent}%</span>
+                    </div>
+                </td>
+                <td>${route.average_wait_minutes} min</td>
+                <td><span class="badge ${levelBadge}">${route.service_level}</span></td>
+            </tr>
+        `;
+    }).join("");
+}
+
+function renderModelMetadata() {
+    if (!state.modelInfo) return;
+    safeSetText("metaAlgorithm", state.modelInfo.algorithm || "Random Forest Regressor");
+    safeSetText("metaDataset", `${state.modelInfo.dataset_rows || 2160} rows`);
+    safeSetText("metaMAE", state.modelInfo.mae ?? 1.79);
+    safeSetText("metaR2", state.modelInfo.r2_score ?? 0.90);
+}
+
+function renderSimulationStatus() {
+    const isRunning = state.simulation.running;
+    const light = document.getElementById("simStatusLight");
+    const label = document.getElementById("simStatusLabel");
+    const playIcon = document.getElementById("simPlayIcon");
+
+    if (light) light.classList.toggle("running", isRunning);
+    if (label) label.textContent = isRunning ? `Sim: Running (${state.simulation.interval_seconds}s)` : "Sim: Idle";
+    if (playIcon) {
+        playIcon.setAttribute("data-lucide", isRunning ? "pause" : "play");
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+// ============================================================
+// 8. SIMULATION CONTROLLER
+// ============================================================
+
+async function toggleSimulation() {
+    const isRunning = state.simulation.running;
+    const endpoint = isRunning ? "/simulation/stop" : "/simulation/start";
+
+    try {
+        const res = await fetch(`${API_BASE}${endpoint}`, { method: "POST" });
+        const data = await res.json();
+        state.simulation = data.status || { running: !isRunning };
+        renderSimulationStatus();
+        showToast(isRunning ? "Simulation paused." : "Simulation loop started (3s interval)", "success");
+        loadAllData(true);
+    } catch (e) {
+        showToast("Simulation control error: " + e.message, "danger");
+    }
+}
+
+async function stepSimulation() {
+    try {
+        const res = await fetch(`${API_BASE}/simulation/step`, { method: "POST" });
+        const data = await res.json();
+        showToast(`Simulated 1 step. ${data.vehicles_updated?.length || 0} vehicles moved.`, "teal");
+        loadAllData(true);
+    } catch (e) {
+        showToast("Simulation step error: " + e.message, "danger");
+    }
+}
+
+async function resetSimulation() {
+    try {
+        await fetch(`${API_BASE}/simulation/reset`, { method: "POST" });
+        showToast("Vehicles reset to default landmark stands.", "success");
+        loadAllData(true);
+    } catch (e) {
+        showToast("Simulation reset error: " + e.message, "danger");
+    }
+}
+
+// ============================================================
+// 9. VEHICLE & RIDE LIFECYCLE ACTIONS
+// ============================================================
+
+async function quickToggleVehicleStatus(vehicleId, newStatus) {
+    try {
+        const res = await fetch(`${API_BASE}/vehicles/${vehicleId}/status?status=${newStatus}`, { method: "PUT" });
+        if (!res.ok) throw new Error("Status update failed");
+        showToast(`Vehicle ${vehicleId} updated to ${newStatus}`, "success");
+        loadAllData(true);
+    } catch (err) {
+        showToast(`Failed to update ${vehicleId}: ${err.message}`, "danger");
+    }
+}
+
+function openAddVehicleModal() {
+    const modal = document.getElementById("addVehicleModal");
+    if (modal) modal.classList.add("show");
+}
+
+function closeAddVehicleModal() {
+    const modal = document.getElementById("addVehicleModal");
+    if (modal) modal.classList.remove("show");
+}
+
+async function handleAddVehicleSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById("newVehicleId").value.trim().toUpperCase();
+    const battery = parseInt(document.getElementById("newVehicleBattery").value, 10);
+    const capacity = parseInt(document.getElementById("newVehicleCapacity").value, 10);
+    const landmark = document.getElementById("newVehicleLocation").value;
+
+    const coords = CAMPUS_LOCATIONS[landmark] || { lat: 31.250844, lon: 75.705091 };
+
+    try {
+        const res = await fetch(`${API_BASE}/vehicles`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                id: id,
+                status: "available",
+                latitude: coords.lat,
+                longitude: coords.lon,
+                distance: 0.5,
+                battery: battery,
+                capacity: capacity
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || "Failed to add vehicle");
+        }
+
+        closeAddVehicleModal();
+        showToast(`E-Rickshaw ${id} successfully added to fleet!`, "success");
+        loadAllData();
+    } catch (err) {
+        showToast(err.message, "danger");
+    }
+}
+
+async function startRideAction(rideId) {
+    try {
+        const res = await fetch(`${API_BASE}/rides/${rideId}/start`, { method: "POST" });
+        if (!res.ok) throw new Error("Could not start ride");
+        showToast(`Ride #REQ-${rideId} marked in progress.`, "teal");
+        loadAllData(true);
+    } catch (e) {
+        showToast(e.message, "danger");
+    }
+}
+
+async function completeRideAction(rideId) {
+    try {
+        const res = await fetch(`${API_BASE}/rides/${rideId}/complete`, { method: "POST" });
+        if (!res.ok) throw new Error("Could not complete ride");
+        showToast(`Ride #REQ-${rideId} completed. Vehicle released to available!`, "success");
+        loadAllData(true);
+    } catch (e) {
+        showToast(e.message, "danger");
+    }
+}
+
+async function toggleDriverStatus(driverId, newStatus) {
+    try {
+        const res = await fetch(`${API_BASE}/drivers/${driverId}/status?status=${newStatus}`, { method: "PUT" });
+        if (!res.ok) throw new Error("Could not update driver status");
+        showToast(`Driver ${driverId} marked ${newStatus}`, "success");
+        loadAllData(true);
+    } catch (e) {
+        showToast(e.message, "danger");
+    }
+}
+
+// ============================================================
+// 10. INTELLIGENT BATCH DISPATCH & DEMAND SIMULATION
+// ============================================================
+
+async function handleBatchDispatch(e) {
+    e.preventDefault();
+    const hour = parseInt(document.getElementById("dispatchHourSelect").value, 10);
+    const weather = parseInt(document.getElementById("dispatchWeatherSelect").value, 10);
+    const today = (new Date().getDay() + 6) % 7;
+
+    const feedback = document.getElementById("dispatchFeedback");
+    if (feedback) {
+        feedback.style.display = "block";
+        feedback.innerHTML = `<span style="color:#667085; font-size:12px;">Running intelligent fleet dispatch...</span>`;
+    }
+
+    try {
+        const res = await fetch(`${API_BASE}/dispatch`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ hour, day: today, weather })
+        });
+        const data = await res.json();
+
+        if (feedback) {
+            feedback.innerHTML = `
+                <div style="background:var(--success-subtle); color:#15803D; padding:10px 14px; border-radius:6px; font-size:12px; line-height:1.4;">
+                    <strong>Dispatch Completed:</strong> ${data.vehicles_dispatched} e-rickshaws dispatched to meet predicted demand of ${data.predicted_demand}. Status: <code>${data.dispatch_status}</code>.
+                </div>
+            `;
+        }
+        showToast(`Dispatched ${data.vehicles_dispatched} vehicles for demand (${data.predicted_demand})`, "success");
+        loadAllData(true);
+    } catch (err) {
+        if (feedback) {
+            feedback.innerHTML = `<span style="color:#EF4444; font-size:12px;">Dispatch failed: ${err.message}</span>`;
+        }
+    }
+}
+
+async function handleDemandPrediction(e) {
+    e.preventDefault();
+    const hour = parseInt(document.getElementById("predHourSelect").value, 10);
+    const day = parseInt(document.getElementById("predDaySelect").value, 10);
+    const weather = parseInt(document.getElementById("predWeatherSelect").value, 10);
+
+    try {
+        const res = await fetch(`${API_BASE}/predict-demand`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ hour, day, weather })
+        });
+        const data = await res.json();
+        const resultVal = document.getElementById("predictionResultValue");
+        if (resultVal) {
+            resultVal.textContent = `${data.predicted_demand} Rides`;
+        }
+        showToast(`Projected demand: ${data.predicted_demand} e-rickshaws needed`, "teal");
+    } catch (err) {
+        showToast(err.message, "danger");
+    }
+}
+
+function executeRecommendationAction(action) {
+    if (action.includes("Dispatch") || action.includes("Staging")) {
+        const currentH = new Date().getHours();
+        document.getElementById("dispatchHourSelect").value = currentH;
+        handleBatchDispatch(new Event("submit"));
+    } else if (action.includes("Charging")) {
+        showToast("Routing low battery vehicles to Academic Block solar station.", "teal");
+    } else {
+        showToast(`Executing action: ${action}`, "success");
+    }
+}
+
+// ============================================================
+// 11. PASSENGER APP BOOKING EXPERIENCE (Rapido / Uber Style)
+// ============================================================
+
+async function submitPassengerRideRequest() {
+    const passengerId = document.getElementById("passengerIdInput").value.trim() || "STU-2026";
+    const pickupLocName = document.getElementById("passengerPickupSelect").value;
+    const destLocName = document.getElementById("passengerDestSelect").value;
+
+    if (pickupLocName === destLocName) {
+        showToast("Pickup and Drop locations cannot be identical", "warning");
+        return;
+    }
+
+    const pickupCoords = CAMPUS_LOCATIONS[pickupLocName];
+    const btn = document.getElementById("btnFindRickshaw");
+    if (btn) btn.innerHTML = `<i data-lucide="loader" class="spin"></i> Matching Nearest E-Rickshaw...`;
+
+    try {
+        const res = await fetch(`${API_BASE}/ride-request`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                passenger_id: passengerId,
+                pickup_latitude: pickupCoords.lat,
+                pickup_longitude: pickupCoords.lon,
+                destination: destLocName
+            })
+        });
+
+        const data = await res.json();
+        if (btn) btn.innerHTML = `<i data-lucide="search"></i> Find Nearby E-Rickshaw`;
+
+        if (data.status === "driver_found") {
+            state.pendingPassengerRide = {
+                passenger_id: passengerId,
+                pickup_latitude: pickupCoords.lat,
+                pickup_longitude: pickupCoords.lon,
+                destination: destLocName,
+                vehicle_id: data.driver.id,
+                search_radius_km: data.search_radius_km,
+                estimated_wait_minutes: data.driver.estimated_wait_minutes,
+                fare: data.fare || 25.0
             };
 
+            // Switch to Step 2 (Confirmation)
+            document.getElementById("passengerBookingStep1").style.display = "none";
+            document.getElementById("passengerBookingStep2").style.display = "block";
 
-            resultElement.innerHTML = `
+            safeSetText("matchedVehicleId", data.driver.id);
+            safeSetText("matchedVehicleFare", `₹${data.fare || 25.0}`);
+            safeSetText("matchedDistance", `${data.driver.distance_km} km`);
+            safeSetText("matchedWaitTime", `${data.driver.estimated_wait_minutes} min`);
+            safeSetText("matchedRadius", `${data.search_radius_km} km`);
+            safeSetText("matchedBattery", `${data.driver.battery || 85}% Batt`);
 
-                <div class="ride-success">
-
-                    <h3>
-                        Driver Found
-                    </h3>
-
-                    <p>
-                        Vehicle:
-                        <strong>
-                            ${data.driver.id}
-                        </strong>
-                    </p>
-
-                    <p>
-                        Distance:
-                        ${data.driver.distance_km}
-                        km
-                    </p>
-
-                    <p>
-                        Estimated Wait:
-                        ${data.driver.estimated_wait_minutes}
-                        minutes
-                    </p>
-
-                    <p>
-                        Search Radius:
-                        ${data.search_radius_km}
-                        km
-                    </p>
-
-                    <button
-                        onclick="confirmRide()"
-                    >
-                        Confirm Ride
-                    </button>
-
-                    <button
-                        onclick="cancelRide()"
-                    >
-                        Cancel
-                    </button>
-
-                </div>
-
-            `;
-
+            showToast(`Driver found nearby! E-Rickshaw ${data.driver.id}`, "success");
         } else {
-
-            pendingRide = null;
-
-            resultElement.innerHTML = `
-
-                <div class="ride-error">
-
-                    <h3>
-                        No Driver Available
-                    </h3>
-
-                    <p>
-                        ${data.message}
-                    </p>
-
-                    <p>
-                        Search Radius:
-                        ${data.search_radius_km}
-                        km
-                    </p>
-
-                </div>
-
-            `;
+            showToast(data.message || "No driver found within campus range", "warning");
         }
 
-    } catch (error) {
-
-        console.error(
-            "Ride request error:",
-            error
-        );
-
-        resultElement.innerHTML = `
-
-            <div class="ride-error">
-
-                <h3>
-                    Request Failed
-                </h3>
-
-                <p>
-                    ${error.message}
-                </p>
-
-            </div>
-
-        `;
+        if (window.lucide) lucide.createIcons();
+    } catch (err) {
+        if (btn) btn.innerHTML = `<i data-lucide="search"></i> Find Nearby E-Rickshaw`;
+        showToast("Ride request error: " + err.message, "danger");
     }
 }
 
+async function confirmPassengerRide() {
+    const ride = state.pendingPassengerRide;
+    if (!ride) return;
 
-async function confirmRide() {
+    try {
+        const res = await fetch(`${API_BASE}/confirm-ride/${ride.vehicle_id}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(ride)
+        });
 
-    if (!pendingRide) {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Confirmation failed");
+
+        state.activePassengerTrip = {
+            ...ride,
+            request_id: data.request_id
+        };
+
+        // Switch to Step 3 (Live Tracking)
+        document.getElementById("passengerBookingStep2").style.display = "none";
+        document.getElementById("passengerBookingStep3").style.display = "block";
+
+        safeSetText("activeVehiclePlate", ride.vehicle_id);
+        safeSetText("activeRideIdTag", `#REQ-${data.request_id}`);
+        safeSetText("activeRideFareDisplay", `₹${ride.fare.toFixed(1)}`);
+
+        showToast("Ride confirmed! Your e-rickshaw is arriving.", "success");
+        loadAllData(true);
+        if (window.lucide) lucide.createIcons();
+    } catch (err) {
+        showToast(err.message, "danger");
+    }
+}
+
+function cancelPassengerMatch() {
+    state.pendingPassengerRide = null;
+    document.getElementById("passengerBookingStep2").style.display = "none";
+    document.getElementById("passengerBookingStep1").style.display = "block";
+    showToast("Ride search cancelled.", "teal");
+}
+
+function passengerCompleteRideMock() {
+    if (state.activePassengerTrip) {
+        completeRideAction(state.activePassengerTrip.request_id);
+    }
+    document.getElementById("passengerBookingStep3").style.display = "none";
+    document.getElementById("passengerBookingStep4").style.display = "block";
+    showToast("Trip finished! Hope you had a smooth ride.", "success");
+}
+
+function resetPassengerView() {
+    state.pendingPassengerRide = null;
+    state.activePassengerTrip = null;
+    document.getElementById("passengerBookingStep4").style.display = "none";
+    document.getElementById("passengerBookingStep1").style.display = "block";
+}
+
+function setRating(stars) {
+    const starsContainer = document.getElementById("ratingStars");
+    if (starsContainer) {
+        starsContainer.innerHTML = [1, 2, 3, 4, 5].map(i =>
+            `<span onclick="setRating(${i})" style="color:${i <= stars ? '#F59E0B' : '#E4E7EC'};">★</span>`
+        ).join("");
+    }
+    showToast(`Thank you for giving ${stars} stars!`, "success");
+}
+
+// ============================================================
+// 12. DRIVER PARTNER CONSOLE
+// ============================================================
+
+function renderDriverConsole() {
+    const driver = state.drivers.find(d => d.id === state.currentDriverId) || state.drivers[0];
+    if (!driver) return;
+
+    safeSetText("driverVehicleId", driver.vehicle_id || "ER01");
+    safeSetText("driverTodayEarnings", `₹${(driver.earnings || 3420).toLocaleString()}`);
+    safeSetText("driverTotalTrips", driver.total_trips || 124);
+
+    const isOnline = driver.status === "online";
+    const badge = document.getElementById("driverShiftBadge");
+    const toggleBtn = document.getElementById("btnToggleDriverOnline");
+
+    if (badge) {
+        badge.textContent = isOnline ? "Online" : "Offline";
+        badge.className = isOnline ? "badge badge-teal" : "badge badge-navy";
+    }
+
+    if (toggleBtn) {
+        toggleBtn.textContent = isOnline ? "Switch Offline" : "Go Online";
+    }
+
+    // Check if there is an active ride assigned to this vehicle
+    const activeRide = state.rides.find(r => r.assigned_vehicle_id === driver.vehicle_id && (r.status === "assigned" || r.status === "in_progress"));
+    const contentBox = document.getElementById("driverTripContent");
+
+    if (contentBox) {
+        if (activeRide) {
+            contentBox.innerHTML = `
+                <div style="display:flex; flex-direction:column; gap:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="badge ${activeRide.status === 'in_progress' ? 'badge-teal' : 'badge-warning'}">
+                            ${activeRide.status === 'in_progress' ? 'Trip In Progress' : 'Pickup Assigned'}
+                        </span>
+                        <strong style="color:var(--text-primary);">₹${activeRide.fare || 25.0}</strong>
+                    </div>
+                    <div style="font-size:13px; line-height:1.6;">
+                        <strong>Passenger:</strong> ${activeRide.passenger_id}<br>
+                        <strong>Pickup Point:</strong> Main Gate<br>
+                        <strong>Drop Location:</strong> ${activeRide.destination}
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:6px;">
+                        ${activeRide.status === 'assigned'
+                            ? `<button class="btn btn-navy btn-sm" style="flex:1;" onclick="startRideAction(${activeRide.id})">Start Trip</button>`
+                            : ''
+                        }
+                        <button class="btn btn-primary btn-sm" style="flex:1;" onclick="completeRideAction(${activeRide.id})">
+                            Complete Trip & Collect Fare
+                        </button>
+                    </div>
+                </div>
+            `;
+        } else {
+            contentBox.innerHTML = `
+                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:16px;">
+                    No pending trips assigned to <strong>${driver.vehicle_id}</strong>. You are on standby.
+                </p>
+            `;
+        }
+    }
+}
+
+function toggleDriverOnlineStatus() {
+    const driver = state.drivers.find(d => d.id === state.currentDriverId) || state.drivers[0];
+    if (!driver) return;
+    const newStatus = driver.status === "online" ? "offline" : "online";
+    toggleDriverStatus(driver.id, newStatus);
+}
+
+// ============================================================
+// 13. UTILITIES & CSV EXPORT
+// ============================================================
+
+function exportRidesCSV() {
+    if (state.rides.length === 0) {
+        showToast("No rides available to export.", "warning");
         return;
     }
 
+    const headers = ["Request_ID", "Passenger_ID", "Pickup_Lat", "Pickup_Lon", "Destination", "Assigned_Vehicle", "Status", "Wait_Time_Min", "Fare_INR", "Created_At"];
+    const rows = state.rides.map(r => [
+        r.id,
+        `"${r.passenger_id}"`,
+        r.pickup_latitude,
+        r.pickup_longitude,
+        `"${r.destination}"`,
+        `"${r.assigned_vehicle_id || ''}"`,
+        `"${r.status}"`,
+        r.estimated_wait_minutes ?? '',
+        r.fare ?? 25.0,
+        `"${r.created_at || ''}"`
+    ]);
 
-    const resultElement =
-        document.getElementById(
-            "rideResult"
-        );
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `E-RideX_Campus_Rides_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Campus rides CSV report downloaded.", "success");
+}
 
+function filterVehiclesTable() {
+    const search = (document.getElementById("vehicleSearchInput")?.value || "").toLowerCase();
+    const status = document.getElementById("vehicleStatusFilter")?.value || "all";
 
-    try {
+    const filtered = state.vehicles.filter(v => {
+        const matchesSearch = v.id.toLowerCase().includes(search);
+        const matchesStatus = status === "all" || v.status === status;
+        return matchesSearch && matchesStatus;
+    });
 
-        resultElement.innerHTML = `
-            <p>
-                Confirming ride...
-            </p>
+    const tbody = document.getElementById("vehiclesTableBody");
+    if (!tbody) return;
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:#667085;">No vehicles matching filter.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(v => {
+        const batt = v.battery ?? 80;
+        let battColor = "batt-high";
+        if (batt < 30) battColor = "batt-low";
+        else if (batt < 70) battColor = "batt-mid";
+
+        const driver = state.drivers.find(d => d.vehicle_id === v.id);
+        const driverName = driver ? `${driver.name} (${driver.id})` : '<span style="color:#98A2B3;">Unassigned</span>';
+
+        return `
+            <tr>
+                <td><strong>${v.id}</strong></td>
+                <td>${getStatusBadge(v.status)}</td>
+                <td>
+                    <div class="battery-wrapper">
+                        <div class="battery-bar"><div class="battery-fill ${battColor}" style="width:${batt}%;"></div></div>
+                        <span style="font-weight:600; font-size:12px;">${batt}%</span>
+                    </div>
+                </td>
+                <td>${v.capacity || 4} Seater</td>
+                <td><code style="font-size:11.5px; color:#477BFF;">${v.latitude.toFixed(4)}, ${v.longitude.toFixed(4)}</code></td>
+                <td>${driverName}</td>
+                <td>
+                    <select class="form-select" style="width:130px; height:32px; font-size:12px;"
+                            onchange="quickToggleVehicleStatus('${v.id}', this.value)">
+                        <option value="available" ${v.status === 'available' ? 'selected' : ''}>Available</option>
+                        <option value="busy" ${v.status === 'busy' ? 'selected' : ''}>Busy</option>
+                        <option value="maintenance" ${v.status === 'maintenance' ? 'selected' : ''}>Maintenance</option>
+                    </select>
+                </td>
+            </tr>
         `;
+    }).join("");
+}
 
+function filterRidesTable() {
+    const search = (document.getElementById("rideSearchInput")?.value || "").toLowerCase();
+    const status = document.getElementById("rideStatusFilter")?.value || "all";
 
-        const response =
-            await fetch(
-                `${API}/confirm-ride/${pendingRide.vehicle_id}`,
-                {
-                    method: "POST",
+    const filtered = state.rides.filter(r => {
+        const matchesSearch = r.passenger_id.toLowerCase().includes(search) || String(r.id).includes(search);
+        const matchesStatus = status === "all" || r.status === status;
+        return matchesSearch && matchesStatus;
+    });
 
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
+    const tbody = document.getElementById("allRidesTableBody");
+    if (!tbody) return;
 
-                    body: JSON.stringify({
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:24px; color:#667085;">No rides matching filter criteria.</td></tr>`;
+        return;
+    }
 
-                        passenger_id:
-                            pendingRide.passenger_id,
+    tbody.innerHTML = filtered.map(r => {
+        const fare = r.fare != null ? `₹${Number(r.fare).toFixed(1)}` : "₹25.0";
+        const wait = r.estimated_wait_minutes != null ? `${r.estimated_wait_minutes} min` : "—";
+        const vehicle = r.assigned_vehicle_id ? `<strong>${r.assigned_vehicle_id}</strong>` : '<span style="color:#98A2B3;">None</span>';
 
-                        pickup_latitude:
-                            pendingRide.pickup_latitude,
-
-                        pickup_longitude:
-                            pendingRide.pickup_longitude,
-
-                        destination:
-                            pendingRide.destination,
-
-                        search_radius_km:
-                            pendingRide.search_radius_km,
-
-                        estimated_wait_minutes:
-                            pendingRide.estimated_wait_minutes
-
-                    })
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.detail ||
-                "Ride confirmation failed"
-            );
+        let actionBtns = "";
+        if (r.status === "assigned") {
+            actionBtns = `
+                <button class="btn btn-navy btn-sm" onclick="startRideAction(${r.id})">Start</button>
+                <button class="btn btn-primary btn-sm" onclick="completeRideAction(${r.id})">Complete</button>
+            `;
+        } else if (r.status === "in_progress") {
+            actionBtns = `
+                <button class="btn btn-primary btn-sm" onclick="completeRideAction(${r.id})">Complete Drop</button>
+            `;
+        } else {
+            actionBtns = `<span style="font-size:11px; color:#98A2B3;">Closed</span>`;
         }
 
-
-        resultElement.innerHTML = `
-
-            <div class="ride-success">
-
-                <h3>
-                    Ride Confirmed
-                </h3>
-
-                <p>
-                    Vehicle:
-                    <strong>
-                        ${data.vehicle_id}
-                    </strong>
-                </p>
-
-                <p>
-                    Request ID:
-                    ${data.request_id}
-                </p>
-
-                <p>
-                    ${data.message}
-                </p>
-
-            </div>
-
+        return `
+            <tr>
+                <td><strong>#REQ-${r.id}</strong></td>
+                <td>${r.passenger_id}</td>
+                <td>Main Gate</td>
+                <td>${r.destination}</td>
+                <td>${vehicle}</td>
+                <td>${wait}</td>
+                <td><strong>${fare}</strong></td>
+                <td>${getStatusBadge(r.status)}</td>
+                <td><div style="display:flex; gap:6px;">${actionBtns}</div></td>
+            </tr>
         `;
+    }).join("");
+}
 
-
-        pendingRide = null;
-
-
-        await loadDashboard();
-
-    } catch (error) {
-
-        console.error(
-            "Ride confirmation error:",
-            error
-        );
-
-        resultElement.innerHTML = `
-
-            <div class="ride-error">
-
-                <h3>
-                    Confirmation Failed
-                </h3>
-
-                <p>
-                    ${error.message}
-                </p>
-
-            </div>
-
-        `;
+function getStatusBadge(status) {
+    switch (status) {
+        case "available":
+        case "completed":
+        case "online":
+            return `<span class="badge badge-success">${status}</span>`;
+        case "busy":
+        case "in_progress":
+        case "on_trip":
+            return `<span class="badge badge-teal">${status}</span>`;
+        case "maintenance":
+        case "pending":
+            return `<span class="badge badge-warning">${status}</span>`;
+        case "unanswered":
+        case "cancelled":
+        case "offline":
+            return `<span class="badge badge-danger">${status}</span>`;
+        default:
+            return `<span class="badge badge-navy">${status}</span>`;
     }
 }
 
-
-function cancelRide() {
-
-    pendingRide = null;
-
-    const resultElement =
-        document.getElementById(
-            "rideResult"
-        );
-
-    resultElement.innerHTML = `
-        <p>
-            Ride request cancelled.
-        </p>
-    `;
+function safeSetText(elemId, text) {
+    const el = document.getElementById(elemId);
+    if (el) el.textContent = text;
 }
 
+function showToast(message, type = "teal") {
+    const container = document.getElementById("toastContainer");
+    if (!container) return;
 
-async function loadDashboard() {
+    const toast = document.createElement("div");
+    toast.className = `toast ${type}`;
+    toast.innerHTML = `<span>${message}</span>`;
+    container.appendChild(toast);
 
-    try {
-
-        const vehiclesResponse =
-            await fetch(
-                `${API}/vehicles`
-            );
-
-        const requestsResponse =
-            await fetch(
-                `${API}/ride-requests`
-            );
-
-        const analyticsResponse =
-            await fetch(
-                `${API}/analytics/routes`
-            );
-
-        const modelResponse =
-            await fetch(
-                `${API}/model-info`
-            );
-
-
-        const vehiclesData =
-            await vehiclesResponse.json();
-
-        const requestsData =
-            await requestsResponse.json();
-
-        const analyticsData =
-            await analyticsResponse.json();
-
-        const modelData =
-            await modelResponse.json();
-
-
-        updateVehicleStats(
-            vehiclesData.vehicles
-        );
-
-
-        updateVehicleStatusList(
-            vehiclesData.vehicles
-        );
-
-
-        updateVehicleMap(
-            vehiclesData.vehicles
-        );
-
-
-        updateRequestStats(
-            requestsData.requests
-        );
-
-
-        updateModelInfo(
-            modelData
-        );
-
-
-        updateRouteAnalytics(
-            analyticsData.routes
-        );
-
-
-        const now =
-            new Date();
-
-
-        const hour =
-            now.getHours();
-
-
-        const day =
-            now.getDay();
-
-
-        const demandResponse =
-            await fetch(
-                `${API}/predict-demand`,
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body: JSON.stringify({
-
-                        hour:
-                            hour,
-
-                        day:
-                            day,
-
-                        weather:
-                            0
-
-                    })
-                }
-            );
-
-
-        const demandData =
-            await demandResponse.json();
-
-
-        updatePredictedDemand(
-            demandData.predicted_demand
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Dashboard loading error:",
-            error
-        );
-    }
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateX(100%)";
+        toast.style.transition = "all 0.3s ease";
+        setTimeout(() => toast.remove(), 300);
+    }, 3500);
 }
-
-
-initializeVehicleMap();
-
-loadDashboard();
-
-
-setInterval(
-    loadDashboard,
-    10000
-);

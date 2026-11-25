@@ -1,505 +1,1189 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-RideX — AI-Powered Campus E-Rickshaw Platform</title>
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <title>E-RideX Admin Dashboard</title>
+    <!-- Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
-    <link
-        rel="stylesheet"
-        href="style.css"
-    >
+    <!-- Application Stylesheet -->
+    <link rel="stylesheet" href="style.css">
 
-    <!-- Leaflet Map -->
-    <link
-        rel="stylesheet"
-        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    >
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
-
-
 <body>
 
+<div class="app-layout">
 
-    <header>
-
-        <div>
-
-            <h1>E-RideX</h1>
-
+    <!-- ========================================================
+         SIDEBAR NAVIGATION (Fixed Dark Navy)
+         ======================================================== -->
+    <aside class="sidebar" id="sidebar">
+        <!-- Brand Header -->
+        <div class="sidebar-header">
+            <a href="#" class="brand-wrapper" onclick="switchNav('overview'); return false;">
+                <div class="brand-icon">
+                    <i data-lucide="zap"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>E-Ride<span>X</span> <span class="brand-badge">AI 2.0</span></h1>
+                    <div class="brand-tagline">Smarter Rides. Greener Tomorrow.</div>
+                </div>
+            </a>
         </div>
 
-        <div class="status">
+        <!-- Navigation Links -->
+        <nav class="sidebar-nav">
+            <!-- Core Section -->
+            <div class="nav-group">
+                <div class="nav-group-title">Core Operations</div>
+                <ul class="nav-list">
+                    <li class="nav-item">
+                        <button class="nav-link active" data-tab="overview" onclick="switchNav('overview')">
+                            <i data-lucide="layout-dashboard"></i>
+                            <span>Overview</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="map" onclick="switchNav('map')">
+                            <i data-lucide="map-pin"></i>
+                            <span>Live Fleet Map</span>
+                            <span class="nav-badge" id="sidebarAvailBadge">5</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="ai-demand" onclick="switchNav('ai-demand')">
+                            <i data-lucide="trending-up"></i>
+                            <span>Demand Forecast</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
 
-            <span></span>
+            <!-- Fleet & Operations -->
+            <div class="nav-group">
+                <div class="nav-group-title">Fleet & Transit</div>
+                <ul class="nav-list">
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="vehicles" onclick="switchNav('vehicles')">
+                            <i data-lucide="truck"></i>
+                            <span>Vehicle Fleet</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="drivers" onclick="switchNav('drivers')">
+                            <i data-lucide="users"></i>
+                            <span>Driver Partners</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="passengers" onclick="switchNav('passengers')">
+                            <i data-lucide="user-check"></i>
+                            <span>Passengers</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="rides" onclick="switchNav('rides')">
+                            <i data-lucide="navigation"></i>
+                            <span>Ride Operations</span>
+                            <span class="nav-badge" id="sidebarRidesBadge">0</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
 
-            System Online
+            <!-- Intelligence & System -->
+            <div class="nav-group">
+                <div class="nav-group-title">Intelligence & Data</div>
+                <ul class="nav-list">
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="analytics" onclick="switchNav('analytics')">
+                            <i data-lucide="bar-chart-3"></i>
+                            <span>Route Analytics</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="reports" onclick="switchNav('reports')">
+                            <i data-lucide="file-text"></i>
+                            <span>Fleet Reports</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link" data-tab="settings" onclick="switchNav('settings')">
+                            <i data-lucide="settings"></i>
+                            <span>System Settings</span>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </nav>
 
+        <!-- Sidebar Footer Fleet Health Widget -->
+        <div class="sidebar-footer">
+            <div class="fleet-health-card">
+                <div class="fleet-health-header">
+                    <span>Campus Fleet Status</span>
+                    <span class="pulse-dot" title="Live GPS & System Feed"></span>
+                </div>
+                <div class="fleet-progress-bar">
+                    <div class="fleet-progress-fill" id="sidebarProgressFill" style="width: 80%;"></div>
+                </div>
+                <div class="fleet-health-meta">
+                    <span id="sidebarHealthMeta">4 / 5 Available</span>
+                    <span id="sidebarBatteryMeta">Avg 82% Batt</span>
+                </div>
+            </div>
         </div>
+    </aside>
 
-    </header>
+    <!-- ========================================================
+         MAIN APPLICATION WRAPPER
+         ======================================================== -->
+    <div class="main-wrapper">
 
-
-    <main>
-
-
-        <!-- Dashboard Header -->
-
-        <section class="dashboard-header">
-
-            <div>
-
-                <h2>
-                    Transportation Dashboard
-                </h2>
-
-                <p>
-                    Real-time campus mobility and service analytics
-                </p>
-
+        <!-- Top Navigation Bar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <button class="mobile-menu-btn" onclick="toggleMobileSidebar()" aria-label="Toggle Menu">
+                    <i data-lucide="menu"></i>
+                </button>
+                <div class="page-title-area">
+                    <h2 id="topbarTitle">Operations Dashboard</h2>
+                    <div class="page-breadcrumb">
+                        <span>E-RideX</span>
+                        <i data-lucide="chevron-right" style="width:12px;height:12px;"></i>
+                        <span id="topbarBreadcrumb">Overview</span>
+                    </div>
+                </div>
             </div>
 
-
-            <button
-                id="refreshButton"
-                onclick="loadDashboard()"
-            >
-
-                Refresh
-
-            </button>
-
-        </section>
-
-
-        <!-- Main Statistics -->
-
-        <section class="stats-grid">
-
-
-            <div class="stat-card">
-
-                <h3>Total Vehicles</h3>
-
-                <div id="totalVehicles">
-                    -
-                </div>
-
+            <!-- Middle View Switcher (Admin / Passenger / Driver) -->
+            <div class="role-switcher">
+                <button class="role-btn active" id="roleBtnAdmin" onclick="switchRole('admin')">
+                    <i data-lucide="shield-check"></i>
+                    <span class="role-label">Admin Portal</span>
+                </button>
+                <button class="role-btn" id="roleBtnPassenger" onclick="switchRole('passenger')">
+                    <i data-lucide="smartphone"></i>
+                    <span class="role-label">Passenger App</span>
+                </button>
+                <button class="role-btn" id="roleBtnDriver" onclick="switchRole('driver')">
+                    <i data-lucide="car"></i>
+                    <span class="role-label">Driver Console</span>
+                </button>
             </div>
 
-
-            <div class="stat-card">
-
-                <h3>Available Vehicles</h3>
-
-                <div id="availableVehicles">
-                    -
+            <!-- Topbar Right Controls -->
+            <div class="topbar-right">
+                <!-- Simulation Controls Pill -->
+                <div class="sim-controls-pill" title="Automated Campus Vehicle Movement Simulator">
+                    <span class="sim-indicator" id="simStatusLight"></span>
+                    <span id="simStatusLabel" style="font-size:11.5px; font-weight:600;">Sim: Idle</span>
+                    <button class="sim-btn" id="btnToggleSim" onclick="toggleSimulation()" title="Start/Pause Simulation">
+                        <i data-lucide="play" id="simPlayIcon" style="width:14px;height:14px;"></i>
+                    </button>
+                    <button class="sim-btn" onclick="stepSimulation()" title="Step 1 Movement">
+                        <i data-lucide="step-forward" style="width:14px;height:14px;"></i>
+                    </button>
+                    <button class="sim-btn" onclick="resetSimulation()" title="Reset Coordinates">
+                        <i data-lucide="rotate-ccw" style="width:14px;height:14px;"></i>
+                    </button>
                 </div>
 
-            </div>
-
-
-            <div class="stat-card">
-
-                <h3>Busy Vehicles</h3>
-
-                <div id="busyVehicles">
-                    -
+                <!-- Clock -->
+                <div class="clock-display" id="liveClockDisplay">
+                    <i data-lucide="clock" style="width:14px;height:14px;"></i>
+                    <span id="liveClockText">--:--</span>
                 </div>
 
-            </div>
-
-
-            <div class="stat-card">
-
-                <h3>Total Requests</h3>
-
-                <div id="totalRequests">
-                    -
+                <!-- System Health Pill -->
+                <div class="system-health-pill">
+                    <i data-lucide="activity" style="width:13px;height:13px;"></i>
+                    <span>Online</span>
                 </div>
 
-            </div>
-
-
-            <div class="stat-card">
-
-                <h3>Unanswered Requests</h3>
-
-                <div id="unansweredRequests">
-                    -
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <h3>Average Wait Time</h3>
-
-                <div id="averageWait">
-                    -
-                </div>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <h3>Predicted Demand</h3>
-
-                <div id="predictedDemand">
-                    -
-                </div>
-
-            </div>
-
-
-        </section>
-
-
-        <!-- AI Model Performance -->
-
-        <section class="analytics-section">
-
-            <div class="section-header">
-
-                <h2>
-                    AI Model Performance
-                </h2>
-
-                <p>
-                    Random Forest model used for campus ride demand prediction
-                </p>
-
-            </div>
-
-
-            <div class="model-info-grid">
-
-
-                <div class="model-info-item">
-
-                    <span>
-                        Algorithm
-                    </span>
-
-                    <strong id="modelAlgorithm">
-                        -
-                    </strong>
-
-                </div>
-
-
-                <div class="model-info-item">
-
-                    <span>
-                        Dataset
-                    </span>
-
-                    <strong id="modelDataset">
-                        -
-                    </strong>
-
-                </div>
-
-
-                <div class="model-info-item">
-
-                    <span>
-                        Training Rows
-                    </span>
-
-                    <strong id="modelTraining">
-                        -
-                    </strong>
-
-                </div>
-
-
-                <div class="model-info-item">
-
-                    <span>
-                        Testing Rows
-                    </span>
-
-                    <strong id="modelTesting">
-                        -
-                    </strong>
-
-                </div>
-
-
-                <div class="model-info-item">
-
-                    <span>
-                        MAE
-                    </span>
-
-                    <strong id="modelMAE">
-                        -
-                    </strong>
-
-                </div>
-
-
-                <div class="model-info-item">
-
-                    <span>
-                        R² Score
-                    </span>
-
-                    <strong id="modelR2">
-                        -
-                    </strong>
-
-                </div>
-
-
-            </div>
-
-        </section>
-
-
-        <!-- Live Vehicle Map -->
-
-        <section class="analytics-section">
-
-            <div class="section-header">
-
-                <h2>
-                    Live Vehicle Map
-                </h2>
-
-                <p>
-                    Real-time e-rickshaw locations and availability
-                </p>
-
-            </div>
-
-
-            <div id="vehicleMap"></div>
-
-        </section>
-
-
-        <!-- Vehicle Status Management -->
-
-        <section class="analytics-section">
-
-            <div class="section-header">
-
-                <h2>
-                    🚕 Vehicle Status Management
-                </h2>
-
-                <p>
-                    Monitor and update the operational status of campus e-rickshaws
-                </p>
-
-            </div>
-
-
-            <div
-                id="vehicleStatusList"
-                class="vehicle-status-list"
-            >
-
-                Loading vehicle statuses...
-
-            </div>
-
-        </section>
-
-
-        <!-- Ride Request Simulator -->
-
-        <section class="analytics-section">
-
-
-            <div class="section-header">
-
-                <h2>
-                    Ride Request
-                </h2>
-
-                <p>
-                    Submit a campus ride request and find the best available e-rickshaw
-                </p>
-
-            </div>
-
-
-            <div class="request-form">
-
-
-                <div class="form-group">
-
-                    <label for="passengerId">
-                        Passenger ID
-                    </label>
-
-                    <input
-                        type="text"
-                        id="passengerId"
-                        placeholder="e.g. STU101"
-                    >
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="pickupLocation">
-                        Pickup Location
-                    </label>
-
-                    <select id="pickupLocation">
-
-                        <option value="Main Gate">
-                            Main Gate
-                        </option>
-
-                        <option value="Library">
-                            Library
-                        </option>
-
-                        <option value="Hostel">
-                            Hostel
-                        </option>
-
-                        <option value="Academic Block">
-                            Academic Block
-                        </option>
-
-                        <option value="Canteen">
-                            Canteen
-                        </option>
-
-                    </select>
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="destination">
-                        Destination
-                    </label>
-
-                    <select id="destination">
-
-                        <option value="Main Gate">
-                            Main Gate
-                        </option>
-
-                        <option value="Library">
-                            Library
-                        </option>
-
-                        <option value="Hostel">
-                            Hostel
-                        </option>
-
-                        <option value="Academic Block">
-                            Academic Block
-                        </option>
-
-                        <option value="Canteen">
-                            Canteen
-                        </option>
-
-                    </select>
-
-                </div>
-
-
-                <button
-                    id="requestRideButton"
-                    onclick="submitRideRequest()"
-                >
-
-                    Find E-Rickshaw
-
+                <!-- Refresh Button -->
+                <button class="btn btn-outline btn-sm" onclick="loadAllData()" title="Reload Data">
+                    <i data-lucide="refresh-cw" style="width:13px;height:13px;"></i>
+                    <span>Refresh</span>
                 </button>
 
-
+                <!-- User Profile -->
+                <div class="user-profile-btn">
+                    <div class="user-avatar">AD</div>
+                    <div class="user-meta">
+                        <span class="user-name">Admin Control</span>
+                        <span class="user-role">Super Admin</span>
+                    </div>
+                </div>
             </div>
+        </header>
 
+        <!-- Main Content Area -->
+        <main class="content-area">
 
-            <div
-                id="rideResult"
-                class="ride-result"
-            >
+            <!-- ====================================================
+                 VIEW 1: OVERVIEW DASHBOARD
+                 ==================================================== -->
+            <section class="view-panel active" id="view-overview">
 
+                <!-- 8 KPI Metrics Cards -->
+                <div class="kpi-grid">
+                    <!-- Total Vehicles -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">Total Fleet</span>
+                            <div class="kpi-value" id="kpiTotalVehicles">5</div>
+                            <span class="kpi-subtext"><span class="kpi-trend-positive">100%</span> Registered Fleet</span>
+                        </div>
+                        <div class="kpi-icon-box icon-navy">
+                            <i data-lucide="truck"></i>
+                        </div>
+                    </div>
+
+                    <!-- Available Vehicles -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">Available Now</span>
+                            <div class="kpi-value" id="kpiAvailableVehicles">4</div>
+                            <span class="kpi-subtext"><span class="kpi-trend-positive">Ready</span> For Instant Pickup</span>
+                        </div>
+                        <div class="kpi-icon-box icon-teal">
+                            <i data-lucide="check-circle-2"></i>
+                        </div>
+                    </div>
+
+                    <!-- Busy Vehicles -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">On Trips (Busy)</span>
+                            <div class="kpi-value" id="kpiBusyVehicles">0</div>
+                            <span class="kpi-subtext"><span class="kpi-trend-neutral">Active</span> In Transit</span>
+                        </div>
+                        <div class="kpi-icon-box icon-blue">
+                            <i data-lucide="navigation"></i>
+                        </div>
+                    </div>
+
+                    <!-- Maintenance -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">In Maintenance</span>
+                            <div class="kpi-value" id="kpiMaintVehicles">1</div>
+                            <span class="kpi-subtext"><span class="kpi-trend-negative">Offline</span> Workshop Depot</span>
+                        </div>
+                        <div class="kpi-icon-box icon-warning">
+                            <i data-lucide="wrench"></i>
+                        </div>
+                    </div>
+
+                    <!-- Total Requests -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">Total Requests</span>
+                            <div class="kpi-value" id="kpiTotalRequests">0</div>
+                            <span class="kpi-subtext">Campus Ride Logs</span>
+                        </div>
+                        <div class="kpi-icon-box icon-navy">
+                            <i data-lucide="clipboard-list"></i>
+                        </div>
+                    </div>
+
+                    <!-- Unanswered Requests -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">Unanswered</span>
+                            <div class="kpi-value" id="kpiUnansweredRequests">0</div>
+                            <span class="kpi-subtext"><span class="kpi-trend-negative">Pending</span> Supply Deficit</span>
+                        </div>
+                        <div class="kpi-icon-box icon-danger">
+                            <i data-lucide="alert-triangle"></i>
+                        </div>
+                    </div>
+
+                    <!-- Average Wait Time -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">Avg Wait Time</span>
+                            <div class="kpi-value" id="kpiAverageWait">1.3 <span style="font-size:16px;font-weight:600;">min</span></div>
+                            <span class="kpi-subtext"><span class="kpi-trend-positive">Optimal</span> Campus Response</span>
+                        </div>
+                        <div class="kpi-icon-box icon-teal">
+                            <i data-lucide="timer"></i>
+                        </div>
+                    </div>
+
+                    <!-- Predicted Demand -->
+                    <div class="kpi-card">
+                        <div class="kpi-content">
+                            <span class="kpi-title">Predicted Demand</span>
+                            <div class="kpi-value" id="kpiPredictedDemand">7 <span style="font-size:16px;font-weight:600;">rides/hr</span></div>
+                            <span class="kpi-subtext"><span class="kpi-trend-positive">AI Model</span> Random Forest</span>
+                        </div>
+                        <div class="kpi-icon-box icon-blue">
+                            <i data-lucide="trending-up"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Two-Column Section: AI Demand Chart & AI Recommendations Panel -->
+                <div class="dashboard-grid-2">
+                    <!-- Demand Forecast Chart Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3><i data-lucide="line-chart" style="color:var(--accent-blue);"></i> AI Demand Forecast (9 AM – 10 PM)</h3>
+                                <p>Hourly projected passenger demand powered by Random Forest Regressor</p>
+                            </div>
+                            <div class="card-actions">
+                                <span class="badge badge-teal"><i data-lucide="cpu" style="width:12px;height:12px;"></i> R²: 0.90 | MAE: 1.79</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div style="height: 290px; width: 100%;">
+                                <canvas id="demandForecastChart"></canvas>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; font-size:11.5px; color:var(--text-secondary); border-top:1px solid var(--card-border-subtle); padding-top:10px;">
+                                <span><strong style="color:var(--text-primary);">Peak Windows:</strong> Morning (8-10 AM) & Evening (4-7 PM)</span>
+                                <span style="font-style:italic;">Demonstration forecast based on synthetic campus telemetry</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Recommendations Panel (Navy) -->
+                    <div class="ai-recommendations-panel">
+                        <div class="ai-rec-header">
+                            <div class="ai-badge">
+                                <i data-lucide="sparkles"></i>
+                                <span>AI Dispatch Advisor</span>
+                            </div>
+                            <span style="font-size:11px; color:var(--navy-muted);">Live Sync</span>
+                        </div>
+                        <div class="ai-rec-title">Intelligent Fleet Allocations</div>
+                        <div class="rec-list" id="aiRecList">
+                            <!-- Populated dynamically via /ai/recommendations -->
+                            <div class="rec-item">
+                                <div class="rec-top">
+                                    <span class="rec-name">Optimizing fleet positions...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Fleet Map Card -->
+                <div class="card" style="margin-bottom: 24px;">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="map" style="color:var(--electric-teal);"></i> Live Fleet Map</h3>
+                            <p>Real-time e-rickshaw locations, battery status, and campus pickup hubs</p>
+                        </div>
+                        <div class="card-actions">
+                            <div class="map-legend">
+                                <div class="legend-item"><span class="legend-dot dot-avail"></span> Available</div>
+                                <div class="legend-item"><span class="legend-dot dot-busy"></span> Busy / On Trip</div>
+                                <div class="legend-item"><span class="legend-dot dot-maint"></span> Maintenance</div>
+                            </div>
+                            <button class="btn btn-outline btn-sm" onclick="recenterMap(dashboardMap)">
+                                <i data-lucide="crosshair" style="width:13px;height:13px;"></i>
+                                <span>Campus Center</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="map-card-body">
+                        <div id="dashboardVehicleMap"></div>
+                    </div>
+                </div>
+
+                <!-- Recent Rides Table & Quick Dispatcher -->
+                <div class="dashboard-grid-2">
+                    <!-- Recent Rides Table -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3><i data-lucide="history" style="color:var(--text-primary);"></i> Recent Ride Activity</h3>
+                                <p>Live logs of campus passenger requests and dispatch assignments</p>
+                            </div>
+                            <div class="card-actions">
+                                <button class="btn btn-outline btn-sm" onclick="switchNav('rides')">View All</button>
+                            </div>
+                        </div>
+                        <div class="card-body" style="padding:0;">
+                            <div class="table-responsive">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Ride ID</th>
+                                            <th>Passenger</th>
+                                            <th>Route</th>
+                                            <th>Vehicle</th>
+                                            <th>Fare</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="recentRidesTableBody">
+                                        <tr>
+                                            <td colspan="6" style="text-align:center; padding:30px; color:var(--text-secondary);">
+                                                Loading recent rides...
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Batch Dispatch Card -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3><i data-lucide="send" style="color:var(--electric-teal);"></i> Intelligent Dispatch</h3>
+                                <p>Dispatch available fleet matching predicted demand</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <form id="quickDispatchForm" onsubmit="handleBatchDispatch(event)">
+                                <div style="display:flex; flex-direction:column; gap:12px;">
+                                    <div>
+                                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:5px;">Target Hour</label>
+                                        <select class="form-select" id="dispatchHourSelect">
+                                            <!-- Hours 8 to 22 populated via JS -->
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:5px;">Weather Factor</label>
+                                        <select class="form-select" id="dispatchWeatherSelect">
+                                            <option value="0">Clear / Normal Weather</option>
+                                            <option value="1">Rain / Adverse Weather (+Demand)</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary" style="margin-top:8px; width:100%;">
+                                        <i data-lucide="zap"></i> Run Batch Dispatch
+                                    </button>
+                                </div>
+                            </form>
+                            <div id="dispatchFeedback" style="margin-top:14px; display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ====================================================
+                 VIEW 2: FULL LIVE FLEET MAP
+                 ==================================================== -->
+            <section class="view-panel" id="view-map">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="map-pin" style="color:var(--electric-teal);"></i> Live Fleet Spatial Operations</h3>
+                            <p>Interactive GPS radar tracking e-rickshaws across campus landmarks</p>
+                        </div>
+                        <div class="card-actions">
+                            <select class="form-select" id="mapFilterSelect" onchange="filterMapVehicles(this.value)" style="width:160px; height:34px; font-size:12px;">
+                                <option value="all">All Vehicles (5)</option>
+                                <option value="available">Available Only</option>
+                                <option value="busy">On Trips (Busy)</option>
+                                <option value="maintenance">In Maintenance</option>
+                            </select>
+                            <button class="btn btn-outline btn-sm" onclick="recenterMap(fullMap)">
+                                <i data-lucide="crosshair"></i> Recenter
+                            </button>
+                        </div>
+                    </div>
+                    <div class="map-card-body">
+                        <div id="fullVehicleMap"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 3: VEHICLE FLEET MANAGEMENT
+                 ==================================================== -->
+            <section class="view-panel" id="view-vehicles">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="truck" style="color:var(--text-primary);"></i> Vehicle Fleet Inventory</h3>
+                            <p>Monitor battery levels, seating capacity, locations and operational status</p>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary btn-sm" onclick="openAddVehicleModal()">
+                                <i data-lucide="plus"></i> Add Vehicle
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="filter-bar">
+                            <div class="search-input-wrapper">
+                                <i data-lucide="search"></i>
+                                <input type="text" class="form-control" id="vehicleSearchInput" placeholder="Search vehicle ID..." oninput="filterVehiclesTable()">
+                            </div>
+                            <div style="display:flex; gap:10px;">
+                                <select class="form-select" id="vehicleStatusFilter" onchange="filterVehiclesTable()" style="width:160px;">
+                                    <option value="all">All Statuses</option>
+                                    <option value="available">Available</option>
+                                    <option value="busy">Busy</option>
+                                    <option value="maintenance">Maintenance</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Vehicle ID</th>
+                                        <th>Current Status</th>
+                                        <th>Battery</th>
+                                        <th>Capacity</th>
+                                        <th>Coordinates</th>
+                                        <th>Assigned Driver</th>
+                                        <th>Change Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="vehiclesTableBody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 4: DRIVER MANAGEMENT
+                 ==================================================== -->
+            <section class="view-panel" id="view-drivers">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="users" style="color:var(--text-primary);"></i> Driver Partner Directory</h3>
+                            <p>Assigned rickshaws, driver ratings, shift status and shift earnings</p>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Driver ID</th>
+                                        <th>Name</th>
+                                        <th>Phone</th>
+                                        <th>Vehicle</th>
+                                        <th>Status</th>
+                                        <th>Rating</th>
+                                        <th>Completed Trips</th>
+                                        <th>Earnings</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="driversTableBody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 5: PASSENGER MANAGEMENT
+                 ==================================================== -->
+            <section class="view-panel" id="view-passengers">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="user-check" style="color:var(--text-primary);"></i> Campus Passenger Directory</h3>
+                            <p>Registered university students and staff trip activity</p>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Passenger ID</th>
+                                        <th>Total Bookings</th>
+                                        <th>Completed Rides</th>
+                                        <th>Unanswered</th>
+                                        <th>Last Destination</th>
+                                        <th>Last Active</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="passengersTableBody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 6: RIDE OPERATIONS
+                 ==================================================== -->
+            <section class="view-panel" id="view-rides">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="navigation" style="color:var(--text-primary);"></i> Campus Ride Operations</h3>
+                            <p>Full lifecycle tracking: Pending, Assigned, In-Progress, Completed and Unanswered</p>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="filter-bar">
+                            <div class="search-input-wrapper">
+                                <i data-lucide="search"></i>
+                                <input type="text" class="form-control" id="rideSearchInput" placeholder="Filter by Passenger or ID..." oninput="filterRidesTable()">
+                            </div>
+                            <div style="display:flex; gap:10px;">
+                                <select class="form-select" id="rideStatusFilter" onchange="filterRidesTable()" style="width:170px;">
+                                    <option value="all">All Statuses</option>
+                                    <option value="assigned">Assigned</option>
+                                    <option value="in_progress">In Progress</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="unanswered">Unanswered</option>
+                                    <option value="cancelled">Cancelled</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Request ID</th>
+                                        <th>Passenger</th>
+                                        <th>Pickup</th>
+                                        <th>Destination</th>
+                                        <th>Assigned Vehicle</th>
+                                        <th>Wait ETA</th>
+                                        <th>Fare</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="allRidesTableBody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 7: AI DEMAND PREDICTION
+                 ==================================================== -->
+            <section class="view-panel" id="view-ai-demand">
+                <div class="dashboard-grid-2">
+                    <!-- Interactive AI Calculator -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3><i data-lucide="calculator" style="color:var(--electric-teal);"></i> Interactive Demand Calculator</h3>
+                                <p>Simulate campus demand based on time, weekday, and weather parameters</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <form id="aiPredictForm" onsubmit="handleDemandPrediction(event)">
+                                <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+                                    <div>
+                                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:5px;">Hour of Day (0-23)</label>
+                                        <select class="form-select" id="predHourSelect">
+                                            <!-- Populated dynamically -->
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:5px;">Day of Week</label>
+                                        <select class="form-select" id="predDaySelect">
+                                            <option value="0">Monday</option>
+                                            <option value="1">Tuesday</option>
+                                            <option value="2">Wednesday</option>
+                                            <option value="3">Thursday</option>
+                                            <option value="4">Friday</option>
+                                            <option value="5">Saturday (Weekend)</option>
+                                            <option value="6">Sunday (Weekend)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="margin-top:14px;">
+                                    <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:5px;">Weather Condition</label>
+                                    <select class="form-select" id="predWeatherSelect">
+                                        <option value="0">Clear / Normal Weather</option>
+                                        <option value="1">Rainy / Adverse Weather (+Demand)</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary" style="margin-top:16px; width:100%;">
+                                    <i data-lucide="cpu"></i> Calculate Demand
+                                </button>
+                            </form>
+
+                            <div id="predictionResultBox" style="margin-top:18px; padding:18px; background:var(--main-bg); border-radius:var(--radius-md); border:1px solid var(--card-border); text-align:center;">
+                                <span style="font-size:12px; color:var(--text-secondary);">Projected Ride Demand:</span>
+                                <div id="predictionResultValue" style="font-size:36px; font-weight:800; color:var(--primary-navy); margin:6px 0;">--</div>
+                                <span style="font-size:11.5px; color:var(--text-muted);">E-Rickshaws needed for optimal service</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Model Performance Architecture -->
+                    <div class="card">
+                        <div class="card-header">
+                            <div class="card-title-group">
+                                <h3><i data-lucide="cpu" style="color:var(--accent-blue);"></i> Machine Learning Model Architecture</h3>
+                                <p>Random Forest Regressor trained on 90 days of telemetry</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div style="display:flex; flex-direction:column; gap:14px;">
+                                <div style="display:flex; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid var(--card-border-subtle);">
+                                    <span style="font-size:13px; color:var(--text-secondary);">Algorithm</span>
+                                    <strong style="font-size:13px;" id="metaAlgorithm">Random Forest Regressor</strong>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid var(--card-border-subtle);">
+                                    <span style="font-size:13px; color:var(--text-secondary);">Dataset Size</span>
+                                    <strong style="font-size:13px;" id="metaDataset">2,160 rows</strong>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid var(--card-border-subtle);">
+                                    <span style="font-size:13px; color:var(--text-secondary);">Train / Test Split</span>
+                                    <strong style="font-size:13px;">80% (1,728) / 20% (432)</strong>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid var(--card-border-subtle);">
+                                    <span style="font-size:13px; color:var(--text-secondary);">Mean Absolute Error (MAE)</span>
+                                    <strong style="font-size:13px; color:var(--success);" id="metaMAE">1.79</strong>
+                                </div>
+                                <div style="display:flex; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid var(--card-border-subtle);">
+                                    <span style="font-size:13px; color:var(--text-secondary);">R² Determination Score</span>
+                                    <strong style="font-size:13px; color:var(--accent-blue);" id="metaR2">0.90</strong>
+                                </div>
+                                <div>
+                                    <span style="font-size:12px; color:var(--text-secondary); display:block; margin-bottom:6px;">Engineered Features:</span>
+                                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                                        <span class="badge badge-navy">hour</span>
+                                        <span class="badge badge-navy">day</span>
+                                        <span class="badge badge-navy">weather</span>
+                                        <span class="badge badge-navy">is_weekend</span>
+                                        <span class="badge badge-navy">is_morning_peak</span>
+                                        <span class="badge badge-navy">is_evening_peak</span>
+                                        <span class="badge badge-navy">is_peak_hour</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 8: ROUTE ANALYTICS
+                 ==================================================== -->
+            <section class="view-panel" id="view-analytics">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="bar-chart-3" style="color:var(--text-primary);"></i> Campus Route Service Performance</h3>
+                            <p>Identify high-traffic corridors, average wait times, and transportation service gaps</p>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Route Corridor</th>
+                                        <th>Total Requests</th>
+                                        <th>Assigned</th>
+                                        <th>Unanswered</th>
+                                        <th>Service Rate</th>
+                                        <th>Avg Wait</th>
+                                        <th>Service Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="routeAnalyticsTableBody">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 9: FLEET REPORTS
+                 ==================================================== -->
+            <section class="view-panel" id="view-reports">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="file-text" style="color:var(--text-primary);"></i> Operational Mobility Reports</h3>
+                            <p>Export historical campus transportation logs and operational audit records</p>
+                        </div>
+                        <div class="card-actions">
+                            <button class="btn btn-primary btn-sm" onclick="exportRidesCSV()">
+                                <i data-lucide="download"></i> Export Rides CSV
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <p style="font-size:13.5px; color:var(--text-secondary); margin-bottom:16px;">
+                            E-RideX keeps an immutable log of student and staff mobility within SQLite. Download CSV summaries for fleet planning and administrative records.
+                        </p>
+                        <div style="background:var(--main-bg); padding:20px; border-radius:var(--radius-md); border:1px solid var(--card-border);">
+                            <h4 style="font-size:14px; margin-bottom:8px;">Fleet Utilization Snapshot</h4>
+                            <ul style="font-size:13px; color:var(--text-secondary); line-height:1.7; padding-left:20px;">
+                                <li>Active Fleet Availability Rate: <strong>80%</strong></li>
+                                <li>Average Trip Distance: <strong>0.82 km</strong></li>
+                                <li>Campus Transit Speed Limit: <strong>20 km/h</strong></li>
+                                <li>Total Battery Efficiency: <strong>Clean Electric (Zero Direct Emissions)</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 VIEW 10: SYSTEM SETTINGS
+                 ==================================================== -->
+            <section class="view-panel" id="view-settings">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title-group">
+                            <h3><i data-lucide="settings" style="color:var(--text-primary);"></i> Platform Configuration</h3>
+                            <p>Campus geographic bounds, pricing rules, and simulation parameters</p>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div style="max-width:600px; display:flex; flex-direction:column; gap:16px;">
+                            <div>
+                                <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">API Endpoint Base</label>
+                                <input type="text" class="form-control" id="settingsApiUrl" value="http://127.0.0.1:8000" readonly>
+                            </div>
+                            <div>
+                                <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Campus Base Fare (₹)</label>
+                                <input type="number" class="form-control" value="20" readonly>
+                            </div>
+                            <div>
+                                <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Rate per Kilometer (₹/km)</label>
+                                <input type="number" class="form-control" value="10" readonly>
+                            </div>
+                            <div>
+                                <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Campus Geofence Center</label>
+                                <input type="text" class="form-control" value="Lat: 31.2510, Lon: 75.7050 (NIT / Campus Core)" readonly>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 ROLE VIEW: PASSENGER BOOKING APP (Uber/Rapido style)
+                 ==================================================== -->
+            <section class="view-panel" id="view-passenger-mode">
+                <div class="mobile-view-container">
+                    <!-- Passenger App Header -->
+                    <div class="passenger-app-header">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <i data-lucide="zap" style="color:var(--electric-teal);"></i>
+                            <strong>E-RideX Campus Passenger</strong>
+                        </div>
+                        <span class="badge badge-teal" style="background:rgba(255,255,255,0.15); color:#FFFFFF;">Student / Faculty</span>
+                    </div>
+
+                    <!-- Passenger App Body -->
+                    <div class="passenger-app-body">
+                        <!-- Step 1: Location Picker & Request Form -->
+                        <div id="passengerBookingStep1">
+                            <!-- Location Picker -->
+                            <div class="location-picker-card">
+                                <div class="loc-row">
+                                    <span class="loc-dot loc-pickup"></span>
+                                    <div style="flex:1;">
+                                        <label style="font-size:10.5px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Pickup Point</label>
+                                        <select class="form-select" id="passengerPickupSelect" style="border:none; padding:0; height:28px; font-weight:600; font-size:14px;">
+                                            <option value="Main Gate">Main Gate</option>
+                                            <option value="Library">Library</option>
+                                            <option value="Hostel">Hostel</option>
+                                            <option value="Academic Block">Academic Block</option>
+                                            <option value="Canteen">Canteen</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style="height:1px; background:var(--card-border-subtle); margin:0 12px;"></div>
+                                <div class="loc-row">
+                                    <span class="loc-dot loc-dest"></span>
+                                    <div style="flex:1;">
+                                        <label style="font-size:10.5px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Drop Location</label>
+                                        <select class="form-select" id="passengerDestSelect" style="border:none; padding:0; height:28px; font-weight:600; font-size:14px;">
+                                            <option value="Library">Library</option>
+                                            <option value="Main Gate">Main Gate</option>
+                                            <option value="Hostel">Hostel</option>
+                                            <option value="Academic Block">Academic Block</option>
+                                            <option value="Canteen">Canteen</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Passenger ID Input -->
+                            <div style="margin-top:12px;">
+                                <label style="font-size:11px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Passenger / Roll ID</label>
+                                <input type="text" class="form-control" id="passengerIdInput" value="STU-2026" placeholder="e.g. STU-101">
+                            </div>
+
+                            <!-- Vehicle Tier Selector -->
+                            <div style="margin-top:14px; display:flex; flex-direction:column; gap:8px;">
+                                <div class="vehicle-tier-card selected">
+                                    <div class="tier-left">
+                                        <div class="tier-icon-box">🛺</div>
+                                        <div class="tier-info">
+                                            <h4>E-RideX Standard</h4>
+                                            <p><span id="tierWaitTime">~1-3 min</span> • 4 Seater Electric</p>
+                                        </div>
+                                    </div>
+                                    <div class="tier-fare" id="tierFareEstimate">₹25</div>
+                                </div>
+                            </div>
+
+                            <!-- Find E-Rickshaw Action Button -->
+                            <button class="btn btn-primary" id="btnFindRickshaw" onclick="submitPassengerRideRequest()" style="width:100%; height:46px; font-size:14px; margin-top:16px;">
+                                <i data-lucide="search"></i> Find Nearby E-Rickshaw
+                            </button>
+                        </div>
+
+                        <!-- Step 2: Driver Matched / Confirmation Screen -->
+                        <div id="passengerBookingStep2" style="display:none;">
+                            <div class="ride-tracking-card">
+                                <div class="tracking-header">
+                                    <span class="badge badge-success"><i data-lucide="check"></i> Driver Matched</span>
+                                    <span style="font-size:12px; font-weight:700; color:var(--primary-navy);" id="matchedVehicleFare">₹25</span>
+                                </div>
+
+                                <div class="driver-info-row">
+                                    <div class="driver-avatar-circle">
+                                        <i data-lucide="user"></i>
+                                    </div>
+                                    <div style="flex:1;">
+                                        <h4 id="matchedVehicleId" style="font-size:16px; font-weight:800; color:var(--primary-navy);">ER01</h4>
+                                        <p style="font-size:12px; color:var(--text-secondary);" id="matchedDriverSub">Standard Campus E-Rickshaw</p>
+                                    </div>
+                                    <div style="text-align:right;">
+                                        <span class="badge badge-teal" id="matchedBattery">92% Batt</span>
+                                    </div>
+                                </div>
+
+                                <div style="display:flex; justify-content:space-between; font-size:12.5px; color:var(--text-secondary); background:var(--main-bg); padding:10px 14px; border-radius:var(--radius-md);">
+                                    <span>Distance: <strong id="matchedDistance" style="color:var(--text-primary);">0.3 km</strong></span>
+                                    <span>ETA: <strong id="matchedWaitTime" style="color:var(--text-primary);">1.3 min</strong></span>
+                                    <span>Radius: <strong id="matchedRadius" style="color:var(--text-primary);">1.0 km</strong></span>
+                                </div>
+
+                                <div style="display:flex; gap:10px; margin-top:6px;">
+                                    <button class="btn btn-primary" onclick="confirmPassengerRide()" style="flex:1; height:44px;">
+                                        <i data-lucide="check-circle"></i> Confirm Ride
+                                    </button>
+                                    <button class="btn btn-outline" onclick="cancelPassengerMatch()" style="height:44px; padding:0 16px;">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Active Ride Live Tracking Screen -->
+                        <div id="passengerBookingStep3" style="display:none;">
+                            <div class="ride-tracking-card">
+                                <div class="tracking-header">
+                                    <span class="badge badge-teal" id="activeRideStatusBadge">Trip in Progress</span>
+                                    <span style="font-size:11px; color:var(--text-muted);" id="activeRideIdTag">REQ-101</span>
+                                </div>
+
+                                <div style="text-align:center; padding:10px 0;">
+                                    <div style="font-size:32px; animation: bounce 2s infinite;">🛺</div>
+                                    <h3 style="font-size:16px; font-weight:800; color:var(--primary-navy); margin-top:4px;" id="activeTrackingTitle">E-Rickshaw is on its way</h3>
+                                    <p style="font-size:12px; color:var(--text-secondary);" id="activeTrackingSubtitle">Heading towards your pickup stop</p>
+                                </div>
+
+                                <div class="driver-info-row">
+                                    <div class="driver-avatar-circle" style="background:var(--primary-navy);">
+                                        <i data-lucide="shield"></i>
+                                    </div>
+                                    <div style="flex:1;">
+                                        <h4 id="activeVehiclePlate" style="font-size:14px; font-weight:800;">ER01</h4>
+                                        <p style="font-size:11.5px; color:var(--text-secondary);">Verified Campus Partner</p>
+                                    </div>
+                                    <button class="btn btn-outline btn-sm" onclick="showToast('Calling driver partner...', 'success')">
+                                        <i data-lucide="phone" style="width:12px;height:12px;"></i> Call
+                                    </button>
+                                </div>
+
+                                <div style="display:flex; justify-content:space-between; align-items:center; background:#F8FAFC; padding:12px; border-radius:var(--radius-md);">
+                                    <span style="font-size:12px; color:var(--text-secondary);">Fare to pay upon drop:</span>
+                                    <strong style="font-size:16px; color:var(--text-primary);" id="activeRideFareDisplay">₹25.0</strong>
+                                </div>
+
+                                <button class="btn btn-navy" onclick="passengerCompleteRideMock()" style="width:100%; height:40px; font-size:13px; margin-top:4px;">
+                                    <i data-lucide="check"></i> Simulate Ride Drop & Finish
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Ride Completed & Rating Screen -->
+                        <div id="passengerBookingStep4" style="display:none;">
+                            <div class="ride-tracking-card" style="text-align:center; padding:28px 20px;">
+                                <div style="width:56px; height:56px; background:var(--success-subtle); color:var(--success); border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 12px; font-size:24px;">
+                                    ✓
+                                </div>
+                                <h3 style="font-size:18px; font-weight:800; color:var(--text-primary);">Ride Completed!</h3>
+                                <p style="font-size:12.5px; color:var(--text-secondary); margin-top:4px;">Thank you for riding green with E-RideX</p>
+
+                                <div style="margin:20px 0; display:flex; justify-content:center; gap:8px; font-size:26px; cursor:pointer;" id="ratingStars">
+                                    <span onclick="setRating(1)">★</span>
+                                    <span onclick="setRating(2)">★</span>
+                                    <span onclick="setRating(3)">★</span>
+                                    <span onclick="setRating(4)">★</span>
+                                    <span onclick="setRating(5)" style="color:var(--warning);">★</span>
+                                </div>
+
+                                <button class="btn btn-primary" onclick="resetPassengerView()" style="width:100%; height:42px;">
+                                    Book Another Ride
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ====================================================
+                 ROLE VIEW: DRIVER PARTNER CONSOLE
+                 ==================================================== -->
+            <section class="view-panel" id="view-driver-mode">
+                <div class="driver-console-card">
+                    <!-- Driver Header -->
+                    <div class="driver-header">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div>
+                                <h3 style="font-size:18px; font-weight:800;">Rajesh Kumar</h3>
+                                <p style="font-size:12px; opacity:0.8;">Assigned Rickshaw: <strong id="driverVehicleId">ER01</strong></p>
+                            </div>
+                            <span class="badge badge-teal" id="driverShiftBadge">Online</span>
+                        </div>
+
+                        <!-- Online / Offline Toggle -->
+                        <div class="driver-status-toggle">
+                            <span style="font-size:13px; font-weight:600;">Shift Duty Status</span>
+                            <button class="btn btn-primary btn-sm" id="btnToggleDriverOnline" onclick="toggleDriverOnlineStatus()">
+                                Switch Offline
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Driver Stats Strip -->
+                    <div class="driver-stats-strip">
+                        <div class="driver-stat-box">
+                            <span>Today's Earnings</span>
+                            <strong id="driverTodayEarnings">₹3,420</strong>
+                        </div>
+                        <div class="driver-stat-box">
+                            <span>Trips Done</span>
+                            <strong id="driverTotalTrips">124</strong>
+                        </div>
+                        <div class="driver-stat-box">
+                            <span>Rating</span>
+                            <strong style="color:var(--warning);">★ 4.9</strong>
+                        </div>
+                    </div>
+
+                    <!-- Driver Console Body -->
+                    <div style="padding:22px; display:flex; flex-direction:column; gap:16px;">
+                        <h4 style="font-size:14px; font-weight:700; color:var(--text-primary);">Active Ride Assignment</h4>
+
+                        <div id="driverActiveTripCard" style="border:1px solid var(--card-border); border-radius:var(--radius-lg); padding:16px; background:#F8FAFC;">
+                            <div id="driverTripContent">
+                                <p style="font-size:13px; color:var(--text-secondary); text-align:center; padding:18px;">
+                                    No active trips assigned. You are currently standing by for requests.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div style="background:var(--main-bg); border-radius:var(--radius-md); padding:14px; font-size:12px; color:var(--text-secondary); line-height:1.5;">
+                            <strong>Pro Tip:</strong> Stay near Academic Block & Main Gate during peak changeover hours (8:45 AM, 1:15 PM, 5:30 PM) for continuous ride allocations.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+</div>
+
+<!-- ============================================================
+     ADD VEHICLE MODAL DIALOG
+     ============================================================ -->
+<div class="modal-backdrop" id="addVehicleModal">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h3 style="font-size:16px; font-weight:700;">Add New E-Rickshaw to Fleet</h3>
+            <button onclick="closeAddVehicleModal()" style="background:none; border:none; cursor:pointer;">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <form onsubmit="handleAddVehicleSubmit(event)">
+            <div class="modal-body" style="display:flex; flex-direction:column; gap:14px;">
+                <div>
+                    <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Vehicle ID (e.g. ER06)</label>
+                    <input type="text" class="form-control" id="newVehicleId" required placeholder="ER06">
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Initial Battery (%)</label>
+                        <input type="number" class="form-control" id="newVehicleBattery" min="10" max="100" value="100">
+                    </div>
+                    <div>
+                        <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Passenger Capacity</label>
+                        <input type="number" class="form-control" id="newVehicleCapacity" min="1" max="6" value="4">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:12px; font-weight:600; color:var(--text-secondary); display:block; margin-bottom:4px;">Initial Campus Landmark</label>
+                    <select class="form-select" id="newVehicleLocation">
+                        <option value="Main Gate">Main Gate (31.2508, 75.7051)</option>
+                        <option value="Library">Library (31.2530, 75.7070)</option>
+                        <option value="Hostel">Hostel (31.2475, 75.7090)</option>
+                        <option value="Academic Block">Academic Block (31.2550, 75.7030)</option>
+                        <option value="Canteen">Canteen (31.2490, 75.7025)</option>
+                    </select>
+                </div>
             </div>
-
-
-        </section>
-
-
-        <!-- Route Analytics -->
-
-        <section class="analytics-section">
-
-
-            <div class="section-header">
-
-                <h2>
-                    Route Service Analytics
-                </h2>
-
-                <p>
-                    Identify frequently requested and poorly serviced routes
-                </p>
-
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeAddVehicleModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save to Fleet</button>
             </div>
+        </form>
+    </div>
+</div>
 
+<!-- ============================================================
+     TOAST NOTIFICATION CONTAINER
+     ============================================================ -->
+<div class="toast-container" id="toastContainer"></div>
 
-            <div
-                id="routeAnalytics"
-                class="route-container"
-            >
+<!-- Leaflet Map JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-                Loading analytics...
-
-            </div>
-
-
-        </section>
-
-
-    </main>
-
-
-    <footer>
-
-        <p>
-            E-RideX © 2026 | AI-Based Campus Transportation System
-        </p>
-
-    </footer>
-
-
-    <!-- Leaflet JavaScript -->
-
-    <script
-        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-        crossorigin=""
-    ></script>
-
-
-    <script src="app.js"></script>
-
+<!-- Application Controller Script -->
+<script src="app.js"></script>
 
 </body>
-
 </html>

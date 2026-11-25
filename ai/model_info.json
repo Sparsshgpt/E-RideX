@@ -1,0 +1,18 @@
+{
+  "algorithm": "Random Forest Regressor",
+  "dataset_rows": 2160,
+  "training_rows": 1728,
+  "testing_rows": 432,
+  "mae": 1.79,
+  "r2_score": 0.9,
+  "features": [
+    "hour",
+    "day",
+    "weather",
+    "is_weekend",
+    "is_morning_peak",
+    "is_afternoon_peak",
+    "is_evening_peak",
+    "is_peak_hour"
+  ]
+}
