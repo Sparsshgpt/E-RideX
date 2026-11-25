@@ -28,3 +28,8 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
+# Project backups
+backup_v1/
+
+# Environment variable variants
+.env.*
